@@ -7,7 +7,6 @@ A secure, proctored desktop examination application built with **Electron**, **R
 ## Table of Contents
 
 - [Project Overview](#project-overview)
-- [Source Repositories & Roles](#source-repositories--roles)
 - [Architecture & Technical Design](#architecture--technical-design)
   - [Process Model & Security Guarantees](#process-model--security-guarantees)
   - [Inter-Process Communication (IPC) Flow](#inter-process-communication-ipc-flow)
@@ -25,8 +24,7 @@ A secure, proctored desktop examination application built with **Electron**, **R
 - [Installation & Setup](#installation--setup)
 - [Running the Application](#running-the-application)
 - [Implementation Status & Roadmap](#implementation-status--roadmap)
-- [Attribution & Provenance](#attribution--provenance)
-
+  
 ---
 
 ## Project Overview
