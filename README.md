@@ -39,18 +39,6 @@ The application operates across two distinct domains:
 
 ---
 
-## Source Repositories & Roles
-
-This application integrates and adapts two foundational open-source codebases:
-
-1. **Primary Desktop Architecture & Interface:** [`onlyaditya/myAthena`](https://github.com/onlyaditya/myAthena) (branch: `main`, `/electron`)
-   - **Role:** Serves as the primary desktop application foundation.
-   - **Preserved Elements:** Frameless Electron window setup, IPC event handlers, preload security bridge, complete Athena design system (440+ lines of custom CSS in `App.css` and `index.css`), permissions UI, camera feed proctoring flow, and original questionnaire component shell (`MainExam.jsx`).
-2. **MCQ Questionnaire & Session Architecture:** [`JACOBIAN01/athena-exam`](https://github.com/JACOBIAN01/athena-exam) (branch: `main`, `/athena-frontend` & `/athena-backend`)
-   - **Role:** Architectural reference for candidate onboarding (Name/URN registration), question bank data schemas, session lifecycle tracking, and answer submission endpoints.
-
----
-
 ## Architecture & Technical Design
 
 ### Process Model & Security Guarantees
@@ -321,12 +309,3 @@ npm start
 - [ ] **Electron Application Packager:** Configuring `electron-builder` to package standalone native installers (`.dmg` for macOS, `.exe` / NSIS for Windows, `.AppImage` for Linux).
 
 ---
-
-## Attribution & Provenance
-
-This project acknowledges and builds upon the work of the original open-source authors:
-
-- **[`onlyaditya/myAthena`](https://github.com/onlyaditya/myAthena):** Created by **Aditya Kumar**. Original implementation of the Electron proctoring desktop architecture, frameless kiosk window controls, IPC preload bridge, camera snapshot persistence, and the complete Athena UI design system.
-- **[`JACOBIAN01/athena-exam`](https://github.com/JACOBIAN01/athena-exam):** Created by **Subhadeep**. Original architectural design for the MCQ question delivery system, candidate session model, and assessment REST endpoints.
-
-All original code, assets, and design layouts have been preserved with appropriate attribution.
