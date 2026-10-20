@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
+import MainExam from "./components/MainExam";
 
 function App() {
   const videoRef = useRef(null);
@@ -117,50 +118,59 @@ function App() {
         className={cameraReady && !started ? "video-preview" : "hidden-video"}
       />
 
-      <div className="page-container">
-        <div className="header-section">
-          <h1>Hi User!</h1>
-          <p>Kindly Allow the following Permissions to Start the test:</p>
-        </div>
+      {started ? (
+        <MainExam
+          time={formatTimeLeft(time)}
+          onEndTest={() => setStarted(false)}
+        />
+      ) : (
+        <div className="page-container">
+          <div className="header-section">
+            <h1>Hi User!</h1>
+            <p>Kindly Allow the following Permissions to Start the test:</p>
+          </div>
 
-        <div className="card-container">
-          <div className="permission-item">
-            <div className="permission-icon">↗</div>
-            <div className="permission-content">
-              <h3>Configure Camera</h3>
-              <p>Kindly configure Camera to attempt quiz/contests.</p>
-              <div className="action-row">
-                <button onClick={getCamera} className="btn btn-dark">
-                  Get Camera Access
+          <div className="card-container">
+            <div className="permission-item">
+              <div className="permission-icon">↗</div>
+              <div className="permission-content">
+                <h3>Configure Camera</h3>
+                <p>Kindly configure Camera to attempt quiz/contests.</p>
+                <div className="action-row">
+                  <button onClick={getCamera} className="btn btn-dark">
+                    Get Camera Access
+                  </button>
+                </div>
+                {cameraReady && <div className="camera-space" />}
+              </div>
+            </div>
+
+            <div className="divider" />
+
+            {/* Fullscreen */}
+            <div className="permission-item">
+              <div className="permission-icon">⛶</div>
+              <div className="permission-content">
+                <h3>Switch to full screen</h3>
+                <p>Kindly close all tabs and switch to full screen.</p>
+                <button onClick={getFullscreen} className="btn btn-light-blue">
+                  Give Full Screen Permissions
                 </button>
               </div>
-              {cameraReady && <div className="camera-space" />}
             </div>
           </div>
 
-          <div className="divider" />
-
-          {/* Fullscreen */}
-          <div className="permission-item">
-            <div className="permission-icon">⛶</div>
-            <div className="permission-content">
-              <h3>Switch to full screen</h3>
-              <p>Kindly close all tabs and switch to full screen.</p>
-              <button onClick={getFullscreen} className="btn btn-light-blue">
-                Give Full Screen Permissions
-              </button>
-            </div>
+          <div className="bottom-actions">
+            <button onClick={startTest} className="btn btn-light-blue">
+              Go To Test
+            </button>
+            <button className="btn btn-outline">Need Help?</button>
           </div>
+          <p style={{ marginTop: "16px", color: "#666" }}>
+            Time Left : {formatTimeLeft(time)}
+          </p>
         </div>
-
-        <div className="bottom-actions">
-          <button onClick={startTest} className="btn btn-light-blue">
-            Go To Test
-          </button>
-          <button className="btn btn-outline">Need Help?</button>
-        </div>
-        <p style={{ marginTop: "16px", color: "#666" }}>Time Left : {formatTimeLeft(time)}</p>
-      </div>
+      )}
     </>
   );
 }
