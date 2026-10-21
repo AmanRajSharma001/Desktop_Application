@@ -1,6 +1,6 @@
 # Athena Exam Desktop Application
 
-A secure, proctored desktop examination application built with **Electron**, **React**, and **Vite**. The application combines native OS lockdown capabilities (frameless kiosk window, native modal dialogs, and periodic background webcam snapshot capture) with a modern React single-page examination interface.
+A secure, proctored desktop examination application built with **Electron**, **React**, and **Vite**. The application combines native OS lockdown capabilities (frameless kiosk window, native modal dialogs, real-time native fullscreen state verification, and periodic background webcam snapshot capture) with a modern React single-page examination interface.
 
 ---
 
@@ -10,19 +10,20 @@ A secure, proctored desktop examination application built with **Electron**, **R
 - [Architecture & Technical Design](#architecture--technical-design)
   - [Process Model & Security Guarantees](#process-model--security-guarantees)
   - [Inter-Process Communication (IPC) Flow](#inter-process-communication-ipc-flow)
-- [Implemented Features & Mechanics](#implemented-features--mechanics)
-  - [1. Pre-flight Permissions & Setup](#1-pre-flight-permissions--setup)
-  - [2. Camera Access & Floating Preview](#2-camera-access--floating-preview)
-  - [3. Background Proctoring Snapshots](#3-background-proctoring-snapshots)
-  - [4. Kiosk Mode & Fullscreen Lockdown](#4-kiosk-mode--fullscreen-lockdown)
-  - [5. Native Code of Conduct Rules Dialog](#5-native-code-of-conduct-rules-dialog)
+- [Mandatory Exam Start & Fullscreen Enforcement](#mandatory-exam-start--fullscreen-enforcement)
+  - [1. Mandatory Pre-Flight Checklist & Validation](#1-mandatory-pre-flight-checklist--validation)
+  - [2. Camera Validation & Proctoring Snapshots](#2-camera-validation--proctoring-snapshots)
+  - [3. Native Fullscreen & Kiosk Mode Lockdown](#3-native-fullscreen--kiosk-mode-lockdown)
+  - [4. Escape Key Handling, Exit Detection & Controlled Recovery](#4-escape-key-handling-exit-detection--controlled-recovery)
+  - [5. Platform Limitations & Security Notice](#5-platform-limitations--security-notice)
   - [6. Authoritative Exam Timer Synchronization](#6-authoritative-exam-timer-synchronization)
-  - [7. MCQ Questionnaire Interface & Navigation](#7-mcq-questionnaire-interface--navigation)
+  - [7. MCQ Questionnaire, Answer Persistence & Navigation](#7-mcq-questionnaire-answer-persistence--navigation)
 - [Directory Structure](#directory-structure)
 - [Electron IPC API Reference](#electron-ipc-api-reference)
 - [Prerequisites & System Requirements](#prerequisites--system-requirements)
 - [Installation & Setup](#installation--setup)
 - [Running the Application](#running-the-application)
+- [Verification & Automated Test Suite](#verification--automated-test-suite)
 - [Implementation Status & Roadmap](#implementation-status--roadmap)
   
 ---
@@ -32,8 +33,8 @@ A secure, proctored desktop examination application built with **Electron**, **R
 The **Athena Exam Desktop Application** provides an academic testing environment that prevents candidates from switching tabs, opening developer utilities, or navigating outside the testing container while taking high-stakes multiple-choice assessments.
 
 The application operates across two distinct domains:
-1. **Desktop Native Shell (Electron):** Manages window framing, system-level fullscreen kiosk lockdown, proctoring camera frame persistence, native dialog prompts, and authoritative server/process timestamps.
-2. **Client Interface (React + Vite):** Delivers a clean, distraction-free user experience styled with pure CSS design tokens, offering candidate permission onboarding, live webcam status, and interactive questionnaire navigation.
+1. **Desktop Native Shell (Electron):** Manages window framing, system-level fullscreen kiosk lockdown, proctoring camera frame persistence, native dialog prompts, authoritative countdown timestamps, and bidirectional window state monitoring.
+2. **Client Interface (React + Vite):** Delivers a clean, distraction-free user experience styled with pure CSS design tokens, offering candidate permission onboarding, live webcam status, fullscreen recovery screens, and interactive questionnaire navigation with answer persistence.
 
 ---
 
@@ -47,7 +48,9 @@ Electron executes JavaScript in two separate environments: the **Main Process** 
 ┌────────────────────────────────────────────────────────┐
 │               ELECTRON MAIN PROCESS                    │
 │                 (electron/main.cjs)                    │
-│   • BrowserWindow Management (Kiosk, Frameless)        │
+│   • BrowserWindow Native Fullscreen / Kiosk Lockdown   │
+│   • Native Window Event Monitoring (enter/leave FS)    │
+│   • Controlled Fullscreen Recovery & IPC Broadcast     │
 │   • Local Filesystem IO (electron/cameraFeed/)         │
 │   • Authoritative Exam Epoch Countdown Timer           │
 │   • Native System Dialogs (dialog.showMessageBox)      │
@@ -60,10 +63,12 @@ Electron executes JavaScript in two separate environments: the **Main Process** 
 ┌────────────────────────────────────────────────────────┐
 │              REACT RENDERER PROCESS                    │
 │                     (Vite 8 + React 19)                │
-│   • Pre-flight Permission Checklist (App.jsx)          │
+│   • Mandatory Pre-flight Checklist (App.jsx)           │
 │   • Floating Webcam Stream (HTML5 Video Element)       │
-│   • Background Snapshot Capture (ImageCapture API)     │
+│   • Background Proctoring Snapshots (5s Interval)      │
+│   • Fullscreen Recovery Blocking Overlay               │
 │   • Interactive MCQ Questionnaire (MainExam.jsx)       │
+│   • Question ID-based Answer State Persistence         │
 └────────────────────────────────────────────────────────┘
 ```
 
@@ -71,6 +76,7 @@ Electron executes JavaScript in two separate environments: the **Main Process** 
 - **`contextIsolation: true`:** Prevents scripts running in the renderer window from gaining direct access to Node.js internals or the Electron internal prototype tree.
 - **`nodeIntegration: false`:** Guarantees that third-party web libraries or remote content cannot call `require()`, execute shell commands, or access the local file system.
 - **Explicit API Surface:** Only functions explicitly exposed on `window.electronAPI` inside [`electron/preload.cjs`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/electron/preload.cjs) can trigger main process IPC routines.
+- **Gitignore Protection:** Proctored camera captures stored in `electron/cameraFeed/` and any `Captures/` paths are strictly excluded from version control.
 
 ---
 
@@ -85,25 +91,28 @@ sequenceDiagram
     participant Main as Electron Main (main.cjs)
     participant FS as Local Filesystem
 
-    Candidate->>UI: Clicks "Configure Camera"
-    UI->>UI: getUserMedia({ video: true })
-    UI-->>Candidate: Displays floating webcam preview
+    Candidate->>UI: Clicks "Enable Camera"
+    UI->>UI: getUserMedia({ video: true }) & validates live track
+    UI-->>Candidate: Updates Camera Status: Ready & shows preview
 
-    Candidate->>UI: Clicks "Give Full Screen Permissions"
+    Candidate->>UI: Clicks "Enter Fullscreen"
     UI->>Preload: window.electronAPI.setFullScreen()
     Preload->>Main: ipcRenderer.invoke("full-screen")
-    Main->>Main: win.kiosk = true (Locks OS screen)
+    Main->>Main: win.setFullScreen(true) & win.setKiosk(true)
+    Main-->>Preload: Returns native verified state
+    Preload-->>UI: Fullscreen Status: Active
 
-    Candidate->>UI: Clicks "Go To Test"
+    Candidate->>UI: Clicks "Start Exam"
+    UI->>UI: Revalidates live camera track & native fullscreen state
     UI->>Preload: window.electronAPI.showExamRules()
     Preload->>Main: ipcRenderer.invoke("show-rules")
     Main->>Candidate: Renders native modal dialog ("Exam rules")
     Candidate->>Main: Clicks "Accept" (code 1)
-    Main-->>UI: Returns response status
+    Main-->>UI: Confirms rules acceptance
 
     UI->>Preload: window.electronAPI.startTest()
     Preload->>Main: ipcRenderer.invoke("start-test")
-    Main->>Main: Sets end_time = Date.now() + 60 mins
+    Main->>Main: Sets authoritative end_time = Date.now() + 60 mins
     UI->>UI: Transitions to <MainExam /> view
 
     loop Every 1 Second
@@ -114,61 +123,115 @@ sequenceDiagram
     end
 
     loop Every 5 Seconds (Proctoring)
-        UI->>UI: imageCapture.takePhoto()
+        UI->>UI: imageCapture.takePhoto() / canvas fallback
         UI->>Preload: window.electronAPI.savePhoto(arrayBuffer)
         Preload->>Main: ipcRenderer.invoke("save-photo", buffer)
         Main->>FS: Writes cameraFeed/[timestamp].jpeg
+    end
+
+    opt Fullscreen Interruption Detected (Escape / OS Gesture)
+        Main->>Main: win emits "leave-full-screen"
+        Main->>Main: Controlled recovery attempt (1 auto-retry)
+        alt Auto-recovery succeeds
+            Main->>UI: Broadcasts fullscreen-changed (Active)
+            UI->>UI: Resumes normal interaction
+        else Auto-recovery fails / manual intervention required
+            Main->>UI: Broadcasts fullscreen-changed (Inactive, examActive)
+            UI->>UI: Mounts Fullscreen Recovery Overlay (blocks MCQ inputs)
+            UI->>UI: Suspends 5s snapshot interval
+            Candidate->>UI: Clicks "Re-enter Fullscreen"
+            UI->>Preload: window.electronAPI.setFullScreen()
+            Main->>Main: win.setFullScreen(true)
+            Main-->>UI: Fullscreen verified -> Overlay unmounts & captures resume
+        end
     end
 ```
 
 ---
 
-## Implemented Features & Mechanics
+## Mandatory Exam Start & Fullscreen Enforcement
 
-### 1. Pre-flight Permissions & Setup
-- Located in [`src/App.jsx`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/src/App.jsx).
-- Displays a card-based permission dashboard styled with the original Athena UI specifications.
-- Prompts the candidate to complete both required steps (Camera configuration and Fullscreen lockdown) before unlocking the examination entry point.
+### 1. Mandatory Pre-Flight Checklist & Validation
 
-### 2. Camera Access & Floating Preview
-- Uses the standard WebRTC API: `navigator.mediaDevices.getUserMedia({ video: true })`.
-- Streams the video feed into an HTML5 `<video>` element with `autoPlay` and `muted` attributes.
-- Displays a floating preview in the top-right corner (`.video-preview`) during the onboarding phase so candidates can verify room lighting and framing.
+Before candidates can access the exam questions, they are greeted with the mandatory onboarding directive:
 
-### 3. Background Proctoring Snapshots
-- Once camera access is granted, the app initializes the W3C `ImageCapture` API on the active video track: `new ImageCapture(track)`.
-- When the exam starts (`started === true`), an active interval fires every **5000 milliseconds**.
-- The video element CSS class changes from `.video-preview` to `.hidden-video` (`width: 1px`, `height: 1px`, `opacity: 0`, positioned off-screen at `-100px, -100px`). This keeps the DOM node mounted and the hardware stream active without distracting the candidate.
-- The snapshot is converted to an `ArrayBuffer` in the renderer, passed over the IPC bridge, converted into a `Buffer` on the main process, and written synchronously to `electron/cameraFeed/[timestamp].jpeg`.
-- If the `cameraFeed/` directory does not exist, the main process creates it recursively on demand (`fs.mkdirSync(feedDir, { recursive: true })`).
+> **Before starting the exam, you must enable your camera and enter fullscreen. Both are mandatory.**
 
-### 4. Kiosk Mode & Fullscreen Lockdown
-- Triggered by calling `window.electronAPI.setFullScreen()`.
-- The main process sets `win.kiosk = true` on the primary `BrowserWindow`.
-- **Kiosk Mechanics:** Unlike standard HTML fullscreen (`requestFullscreen()`), Electron's kiosk mode locks out desktop window controls, hides the macOS dock / Windows taskbar, and disables standard operating system window switching shortcuts.
-- **Escape / Exit Behavior:** In accordance with OnlyAditya's original implementation, no exit keybind (e.g., Escape) is exposed to the candidate. Exiting kiosk mode requires finishing the test, reloading the application window, or terminating the desktop process.
+The setup dashboard renders dedicated interactive controls with explicit status badges:
+- **Enable Camera:** Invokes `navigator.mediaDevices.getUserMedia({ video: true })` and mounts a floating preview.
+- **Camera Status:** Displays `Not Ready`, `Ready`, or `Error` (with detailed diagnostic information on permission denial or missing hardware).
+- **Enter Fullscreen:** Invokes native Electron window fullscreen/kiosk mode.
+- **Fullscreen Status:** Displays `Inactive`, `Active`, or `Error`.
+- **Start Exam:** Strictly disabled until both `cameraStatus === "Ready"` and `fullscreenStatus === "Active"`.
 
-### 5. Native Code of Conduct Rules Dialog
-- Before entering the assessment, the candidate clicks **Go To Test**.
-- Calling `window.electronAPI.showExamRules()` invokes Electron's `dialog.showMessageBox()`.
-- Renders an OS-native modal dialog with two options:
-  - **Cancel** (`index 0`)
-  - **Accept** (`index 1`)
-- The exam transitions only after the modal is acknowledged, ensuring candidates confirm academic integrity terms before the clock starts.
+#### Strict Pre-Flight Revalidation:
+When the candidate clicks **Start Exam**, the application executes a second synchronous pre-flight revalidation:
+1. Verifies that the camera stream and active video track are still live (`track.readyState === "live" && track.enabled`).
+2. Queries the native Electron window state via `window.electronAPI.getFullscreenStatus()`.
+
+If either check fails (e.g., webcam disconnected or fullscreen dropped between setup and start), the exam does **not** start, the candidate remains on the setup screen, and an explanatory resolution banner is displayed.
+
+---
+
+### 2. Camera Validation & Proctoring Snapshots
+
+- **Hardware Acquisition:** Camera access is acquired through standard WebRTC APIs. Before requesting a new stream, any prior streams are stopped to prevent resource leaks or duplicate hardware handles.
+- **Track Health Checks:** The application asserts that `stream.getVideoTracks().length > 0` and `track.readyState === "live"`.
+- **Proctoring Snapshots:** Once the exam starts, an automated interval captures a snapshot every **5000 milliseconds**.
+- **Resilient Fallback Pipeline:** Snapshots use the W3C `ImageCapture` API (`takePhoto()`), with an automated fallback to an off-screen HTML5 `<canvas>` buffer capture if `takePhoto()` is unsupported or throws an error.
+- **Concurrency Guard:** An `isCapturing` lock ensures overlapping snapshot requests are skipped if disk IO or network delays exceed the interval.
+- **Storage & Sanitization:** Snapshot buffers are saved by the main process to `electron/cameraFeed/[timestamp].jpeg`. File write errors are caught safely and returned as structured responses.
+- **Lifecycle Cleanup:** When the assessment finishes or the window unmounts, snapshot intervals are cleared and all media tracks are stopped via `track.stop()`.
+
+---
+
+### 3. Native Fullscreen & Kiosk Mode Lockdown
+
+Rather than relying on renderer-only CSS tricks or setting dummy JavaScript properties such as `win.kiosk = true`, Athena calls Electron's native `BrowserWindow` APIs:
+
+- **macOS (`darwin`):** Calls `win.setFullScreen(true)` (native macOS Space fullscreen) and `win.setKiosk(true)` (locks out the macOS dock and menu bar).
+- **Windows / Linux:** Calls `win.setKiosk(true)` and `win.setFullScreen(true)` to hide the OS taskbar and window decorations.
+- **Native Verification:** Window state is verified via `win.isFullScreen() || win.isKiosk()`.
+
+---
+
+### 4. Escape Key Handling, Exit Detection & Controlled Recovery
+
+- **Escape Interception:** Electron's main process listens to `win.webContents.on("before-input-event")`. When `input.key === "Escape"` and an exam is active, default Chromium fullscreen dismissal is intercepted with `event.preventDefault()`.
+- **Native Exit Monitoring:** The main process binds listeners to `leave-full-screen` and `leave-html-full-screen`. If the candidate uses native OS gestures (e.g., trackpad swipe, Mission Control, or OS key combinations) to leave fullscreen:
+  1. **Controlled Recovery:** The main process initiates **one** controlled recovery attempt after a 300ms transition delay to re-assert fullscreen.
+  2. **Loop Prevention:** Automatic recovery is strictly capped (`MAX_AUTO_RECOVERY = 1`) to prevent endless loops or focus-stealing wars.
+  3. **Recovery Screen Overlay:** If fullscreen remains unverified, the main process broadcasts `fullscreen-changed: { isActive: false, examActive: true }`. The React UI displays a blocking modal overlay:
+     - Question navigation and radio inputs are disabled.
+     - Snapshot intervals are suspended.
+     - The authoritative exam timer continues without resetting.
+     - A **Re-enter Fullscreen** button allows the candidate to re-verify fullscreen and resume their assessment.
+
+---
+
+### 5. Platform Limitations & Security Notice
+
+> [!NOTE]
+> **Operating System Limitations:**
+> No application can universally disable OS-level security shortcuts. Operating systems like macOS and Linux prioritize system-level gestures (such as Mission Control, App Exposé, or Cmd+Option+Esc) and display manager hotkeys above user-space applications. Athena implements the strongest reasonable enforcement available in user space by combining `before-input-event` interception, native window event monitoring, controlled auto-recovery, and an interaction-blocking recovery overlay.
+
+---
 
 ### 6. Authoritative Exam Timer Synchronization
-- Avoids client-side clock tampering by maintaining the target exam expiration timestamp on the Electron main process: `end_time = Date.now() + 60 * 60 * 1000` (1-hour standard duration).
-- The renderer polls the main process every 1000ms using `window.electronAPI.getRemainingTime()`.
-- Calculates remaining time using `Math.max(0, end_time - Date.now())` to prevent negative timestamps.
-- Formatted via a zero-padded utility into a clean `HH:MM:SS` display.
 
-### 7. MCQ Questionnaire Interface & Navigation
-- Implemented in [`src/components/MainExam.jsx`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/src/components/MainExam.jsx).
-- Displays the exam status header, real-time countdown timer, and active question progress (`Question X of Y`).
-- Provides radio-button option selection with responsive hover and checked states.
-- Implements bounded pagination buttons (**Previous** disabled on question 1; **Next** disabled on the final question).
-- Includes an **End Test** button that returns the candidate to the setup screen.
-- **Graceful Fallback:** If the external mock backend is unreachable, the component seamlessly serves a built-in 5-question baseline dataset covering Electron and web engineering concepts, ensuring the UI remains 100% interactive and testable offline.
+- **Server/Process Authoritative:** To prevent client-side clock tampering, `end_time` is stored on the Electron main process: `end_time = Date.now() + 60 * 60 * 1000`.
+- **Idempotent Start:** If `start-test` is invoked again during the exam session, the existing `end_time` is preserved, ensuring the timer is never reset during question navigation or fullscreen recovery.
+- **Polling & Format:** The renderer polls `window.electronAPI.getRemainingTime()` every 1000ms and formats milliseconds into `HH:MM:SS`.
+- **Automatic Expiry:** When remaining time reaches `<= 0`, the exam automatically concludes and triggers teardown.
+
+---
+
+### 7. MCQ Questionnaire, Answer Persistence & Navigation
+
+- **Answer State Persistence:** Selected answers are stored in a state dictionary mapped by question ID (`{ [questionId]: optionIndex }`). Navigating forward or backward restores the candidate's previously selected option without data loss.
+- **Dynamic Question Count:** The progress display (`Question X of Y`) and navigation boundaries adapt dynamically to `questions.length`.
+- **Bounded Pagination:** **Previous** is disabled on the first question (`currentIndex === 0`), and **Next** is disabled on the final question (`currentIndex === totalQuestions - 1`).
+- **Blocked State Handling:** When fullscreen recovery is active (`isBlocked = true`), all radio inputs, navigation buttons, and end-test triggers are disabled.
 
 ---
 
@@ -176,11 +239,11 @@ sequenceDiagram
 
 ```text
 Desktop_Application/
-├── .gitignore                   # Git rules ignoring logs, node_modules, build, and cameraFeed/
+├── .gitignore                   # Excludes logs, node_modules, build, and cameraFeed/
 ├── electron/
-│   ├── cameraFeed/              # Automatically created directory storing captured JPEG frames
-│   ├── main.cjs                 # Electron main process (Window, Kiosk, IPC, Dialog, Snapshot IO)
-│   └── preload.cjs              # Isolated context bridge exposing window.electronAPI
+│   ├── cameraFeed/              # Proctoring snapshot directory (ignored by git)
+│   ├── main.cjs                 # Main process (Native fullscreen, IPC, timer, snapshot IO)
+│   └── preload.cjs              # Secure contextBridge exposing window.electronAPI
 ├── public/
 │   ├── favicon.svg              # Athena desktop favicon
 │   └── icons.svg                # Application SVG symbol definitions
@@ -190,47 +253,51 @@ Desktop_Application/
 │   │   ├── react.svg
 │   │   └── vite.svg
 │   ├── components/
-│   │   └── MainExam.jsx         # MCQ assessment container, options, and navigation controls
-│   ├── App.css                  # 440+ lines of Athena UI stylesheets
-│   ├── App.jsx                  # Main permissions dashboard, camera capture, and view router
+│   │   └── MainExam.jsx         # MCQ container with answer persistence & blocked state
+│   ├── App.css                  # Athena styling (statuses, recovery overlay, cards)
+│   ├── App.jsx                  # Pre-flight onboarding, camera capture & view coordinator
 │   ├── index.css                # Global CSS variables, layout tokens, and typography
-│   └── main.jsx                 # React DOM root entry point
-├── eslint.config.js             # ESLint configuration enforcing React hook safety
-├── index.html                   # HTML template hosting the React mount element
-├── INTEGRATION_MAP.md           # Granular file-by-file tracking table between source repos
-├── package-lock.json            # Deterministic dependency lockfile
-├── package.json                 # Project scripts and dependency declarations
-├── PACKAGE_LOG.md               # Audit log of all installed dependencies and exact versions
-├── README.md                    # Project documentation and developer reference
-└── vite.config.js               # Vite bundler configuration using @vitejs/plugin-react
+│   └── main.jsx                 # React DOM mount point
+├── test/
+│   └── exam_enforcement.test.js # Automated test suite verifying 12 exam scenarios
+├── eslint.config.js             # ESLint config covering React and Node environments
+├── index.html                   # HTML host document
+├── INTEGRATION_MAP.md           # Granular file tracking against upstream references
+├── package-lock.json            # Dependency lockfile
+├── package.json                 # Project configuration and scripts
+├── PACKAGE_LOG.md               # Package audit log
+├── README.md                    # Project documentation
+└── vite.config.js               # Vite bundler configuration
 ```
 
 ---
 
 ## Electron IPC API Reference
 
-The preload bridge isolates the renderer process and exposes a safe `window.electronAPI` interface:
-
 | Method Name | Channel Name | Parameters | Returns | Description |
 | :--- | :--- | :--- | :--- | :--- |
-| `setFullScreen()` | `"full-screen"` | `void` | `Promise<void>` | Enables native kiosk mode on the application window (`win.kiosk = true`). |
-| `showExamRules()` | `"show-rules"` | `void` | `Promise<number>` | Triggers a blocking native system message box with exam guidelines; resolves with the clicked button index (`0` for Cancel, `1` for Accept). |
+| `setFullScreen()` | `"full-screen"` | `void` | `Promise<Object>` | Activates native fullscreen and kiosk mode; returns verified window state. |
+| `exitFullScreen()` | `"exit-full-screen"` | `void` | `Promise<Object>` | Exits native fullscreen and kiosk mode; returns verified window state. |
+| `getFullscreenStatus()` | `"get-fullscreen-status"` | `void` | `Promise<Object>` | Queries native `isFullScreen()` and `isKiosk()` window properties. |
+| `onFullscreenChange(cb)` | `"fullscreen-changed"` | `Function` | `Function` | Subscribes to window state broadcasts; returns an unsubscribe function. |
+| `showExamRules()` | `"show-rules"` | `void` | `Promise<number>` | Displays native modal dialog with code of conduct rules (`1` = Accept, `0` = Cancel). |
 | `showRules()` | `"show-rules"` | `void` | `Promise<number>` | Backward-compatibility alias for `showExamRules()`. |
-| `startTest()` | `"start-test"` | `void` | `Promise<number>` | Sets the authoritative exam expiration epoch timestamp on the main process (default: 60 minutes). |
+| `startTest()` | `"start-test"` | `void` | `Promise<number>` | Initializes authoritative 60-minute countdown epoch; preserves existing epoch if already set. |
+| `endTest()` | `"end-test"` | `void` | `Promise<Object>` | Deactivates active exam state, resets timer epoch, and exits fullscreen mode. |
 | `getRemainingTime()` | `"get-time"` | `void` | `Promise<number>` | Returns remaining test duration in milliseconds (`end_time - Date.now()`). |
-| `savePhoto(buffer)` | `"save-photo"` | `ArrayBuffer` | `Promise<Object>` | Writes camera snapshot bytes into `electron/cameraFeed/[timestamp].jpeg` on the local disk. |
+| `savePhoto(buffer)` | `"save-photo"` | `ArrayBuffer` | `Promise<Object>` | Safely writes snapshot bytes to `electron/cameraFeed/[timestamp].jpeg`. |
 
 ---
 
 ## Prerequisites & System Requirements
 
-- **Node.js:** `v18.0.0` or higher (verified on Node.js `v25.8.2`).
-- **npm:** `v9.0.0` or higher (verified on npm `11.11.1`).
+- **Node.js:** `v18.0.0` or higher (tested on Node.js `v25.8.2`).
+- **npm:** `v9.0.0` or higher (tested on npm `11.11.1`).
 - **Operating System:**
   - macOS 11.0 (Big Sur) or higher (Apple Silicon & Intel).
   - Windows 10 / 11 (64-bit).
   - Linux (Ubuntu 20.04+, Debian 11+, Fedora 36+).
-- **Hardware:** Webcam/Camera device required for proctoring checks.
+- **Hardware:** Webcam / video device required for proctoring checks.
 
 ---
 
@@ -247,9 +314,10 @@ The preload bridge isolates the renderer process and exposes a safe `window.elec
    npm install
    ```
 
-3. **Verify linting and build:**
+3. **Verify linting, tests, and build:**
    ```bash
    npm run lint
+   npm test
    npm run build
    ```
 
@@ -273,34 +341,58 @@ npm start
 
 ### Option 2: Standalone / Production Build Mode
 
-Build the React frontend into static assets. The Electron main process contains an automatic fallback mechanism: if `http://localhost:5173/` is unavailable, it immediately loads [`dist/index.html`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/dist/index.html).
+Build the React frontend into static assets. The Electron main process automatically falls back to [`dist/index.html`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/dist/index.html) if `http://localhost:5173/` is unreachable:
 
 ```bash
 # 1. Compile production bundle
 npm run build
 
-# 2. Launch the desktop application
+# 2. Launch desktop application
 npm start
 ```
+
+---
+
+## Verification & Automated Test Suite
+
+The repository includes an automated test suite executed via Node.js's native test runner (`node --test`), verifying all 12 mandatory exam scenarios:
+
+```bash
+npm test
+```
+
+### Verified Test Matrix:
+
+| # | Scenario | Verification Result | Details |
+| :--- | :--- | :--- | :--- |
+| **1** | Starting with neither prerequisite satisfied | Passed | Start Exam is blocked; descriptive error message generated. |
+| **2** | Camera ready but fullscreen inactive | Passed | Blocked until native fullscreen is verified. |
+| **3** | Fullscreen active but camera unavailable | Passed | Blocked when video track is missing, ended, or disabled. |
+| **4** | Starting after both prerequisites are satisfied | Passed | Pre-flight check passes and proceeds to rules dialog & exam start. |
+| **5** | Pressing Escape during the active exam | Passed | `before-input-event` intercepts Escape and calls `preventDefault()`. |
+| **6** | Exiting fullscreen through external OS mechanism | Passed | Detected by native window listeners (`leave-full-screen`). |
+| **7** | Successful fullscreen recovery | Passed | Controlled auto-recovery restores fullscreen without resetting timer. |
+| **8** | Failed fullscreen recovery and blocked interaction | Passed | Blocks MCQ inputs, disables navigation, mounts recovery overlay. |
+| **9** | Camera permission denial or hardware failure | Passed | Formats helpful diagnostic errors for `NotAllowedError`/`NotFoundError`. |
+| **10** | Camera capture and correct file storage | Passed | Writes buffer to `electron/cameraFeed/` with timestamp `.jpeg`. |
+| **11** | Answer persistence during question navigation | Passed | Answers stored by question ID; preserved when moving back and forth. |
+| **12** | Exam termination and hardware cleanup | Passed | Clears intervals, stops camera tracks, and resets timer epoch. |
 
 ---
 
 ## Implementation Status & Roadmap
 
 ### What Is Fully Implemented & Working Today
-- [x] **Electron Process Shell:** Frameless desktop window with secure context isolation and disabled node integration.
-- [x] **Preload Bridge:** Complete `window.electronAPI` interface with bidirectional IPC handling.
-- [x] **Athena Design System:** Faithful preservation of all original styles, cards, buttons, fonts, and responsive layouts.
-- [x] **Webcam Integration:** Real-time camera permissions, stream rendering, and floating preview box.
-- [x] **Automated Proctoring Snapshots:** Periodic 5-second `ImageCapture` extraction, array buffer serialization, and filesystem saving to `electron/cameraFeed/`.
-- [x] **Kiosk Mode Enforcement:** Native OS window lockdown via `win.kiosk = true`.
-- [x] **Native Rules Dialog:** Modal confirmation dialog using Electron's `dialog.showMessageBox`.
-- [x] **Synchronized Countdown Timer:** Server/process authoritative timestamp polling with zero timer drift.
-- [x] **MCQ Navigation Shell:** Interactive question card with radio option selection, progress indicator, and pagination buttons.
-- [x] **Offline Resilience:** Graceful local data fallback for all questionnaire views when network backend is absent.
+- [x] **Mandatory Exam Start Checklist:** Clear notice, live camera preview, native fullscreen activation, status badges, and strict pre-flight revalidation.
+- [x] **Native Fullscreen Lockdown:** Platform-aware `setFullScreen(true)` and `setKiosk(true)` with native window state querying.
+- [x] **Exit Detection & Recovery:** Interception of Escape where supported, native exit detection, controlled auto-recovery (1 retry), and blocking recovery screen.
+- [x] **Proctoring Snapshots:** 5-second interval during active verified exam, HTML5 canvas fallback, concurrency lock, and disk IO error handling.
+- [x] **MCQ Answer Persistence:** Answers stored by question ID, restored upon navigation, bounded pagination, and dynamic question count.
+- [x] **Authoritative Timer Synchronization:** Non-resetting main process countdown epoch with automatic expiry.
+- [x] **Automated Test Suite:** 12 automated test scenarios verifying validation, lifecycle, and recovery.
 
 ### Remaining Work & Future Roadmap
-- [ ] **Candidate Identity Onboarding:** Integrating student registration fields (`Name` and University Roll Number `URN`) from the JACOBIAN01 reference repository before starting the exam.
+- [ ] **Candidate Identity Onboarding:** Integrating student registration fields (`Name` and University Roll Number `URN`) before starting the exam.
 - [ ] **Integrated Express Backend Service:** Embedding or connecting the Express API service (`server.js`) to serve dynamic questions from `questions.json` and persist candidate sessions in `sessions.json`.
 - [ ] **Answer Submission & Scoring Engine:** Recording selected option indices, evaluating answers against the question bank answer key, and calculating scores.
 - [ ] **Summary & Results Dashboard:** Rendering an end-of-exam review screen showing questions attempted, correct answers, wrong answers, and overall percentage.
