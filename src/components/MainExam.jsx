@@ -28,36 +28,31 @@ const sampleQuestions = [
   },
 ];
 
-function MainExam({ time, onEndTest }) {
-  const [questionId, setQuestionId] = useState(1);
-  const [question, setQuestion] = useState(sampleQuestions[0]);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const totalQuestions = 5;
+function MainExam({ time, onEndTest, isBlocked = false }) {
+  const [questions, setQuestions] = useState(sampleQuestions);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [answers, setAnswers] = useState({});
 
-  async function getQuestion(id) {
-    try {
-      const response = await fetch(`http://localhost:3000/exam/mcq/${id}`);
-      if (!response.ok) throw new Error("Backend not available");
-      const data = await response.json();
-      setQuestion(data);
-    } catch {
-      const found = sampleQuestions.find((q) => q.id === id) || sampleQuestions[0];
-      setQuestion(found);
-    }
-  }
+  const totalQuestions = questions.length;
+  const currentQuestion = questions[currentIndex] || sampleQuestions[0];
+  const questionId = currentQuestion ? currentQuestion.id : 1;
+  const selectedOption = answers[questionId] !== undefined ? answers[questionId] : null;
 
   useEffect(() => {
     let active = true;
-    fetch(`http://localhost:3000/exam/mcq/1`)
+    // Attempt to load full question set if backend service is running
+    fetch("http://localhost:3000/exam/mcq/all")
       .then((res) => {
-        if (!res.ok) throw new Error("Backend unavailable");
+        if (!res.ok) throw new Error("Backend not available");
         return res.json();
       })
       .then((data) => {
-        if (active) setQuestion(data);
+        if (active && Array.isArray(data) && data.length > 0) {
+          setQuestions(data);
+        }
       })
       .catch(() => {
-        // Fallback is already loaded via initial state
+        // Fallback remains the initial sampleQuestions
       });
 
     return () => {
@@ -65,23 +60,30 @@ function MainExam({ time, onEndTest }) {
     };
   }, []);
 
-  async function nextQuestion() {
-    if (questionId === totalQuestions) return;
-    const nextId = questionId + 1;
-    setQuestionId(nextId);
-    setSelectedOption(null);
-    await getQuestion(nextId);
+  function handleOptionSelect(index) {
+    if (isBlocked) return;
+    setAnswers((prev) => ({
+      ...prev,
+      [questionId]: index,
+    }));
   }
 
-  async function previousQuestion() {
-    if (questionId === 1) return;
-    const previousId = questionId - 1;
-    setQuestionId(previousId);
-    setSelectedOption(null);
-    await getQuestion(previousId);
+  function nextQuestion() {
+    if (isBlocked) return;
+    if (currentIndex < totalQuestions - 1) {
+      setCurrentIndex((prev) => prev + 1);
+    }
+  }
+
+  function previousQuestion() {
+    if (isBlocked) return;
+    if (currentIndex > 0) {
+      setCurrentIndex((prev) => prev - 1);
+    }
   }
 
   function handleEndTest() {
+    if (isBlocked) return;
     if (onEndTest) {
       onEndTest();
     } else {
@@ -90,34 +92,42 @@ function MainExam({ time, onEndTest }) {
   }
 
   return (
-    <div className="exam-page">
+    <div className={`exam-page ${isBlocked ? "exam-page-blocked" : ""}`}>
       <div className="exam-container">
         {/* Exam Header */}
         <div className="exam-header">
           <h3>Time Left: {time}</h3>
-          <button className="end-test-btn" onClick={handleEndTest}>
+          <button
+            className="end-test-btn"
+            onClick={handleEndTest}
+            disabled={isBlocked}
+          >
             End Test
           </button>
         </div>
 
         {/* Question Card */}
-        {question && (
+        {currentQuestion && (
           <div className="question-card">
             <h2>
-              Question {questionId} of {totalQuestions}
+              Question {currentIndex + 1} of {totalQuestions}
             </h2>
 
-            <p>{question.question}</p>
+            <p>{currentQuestion.question}</p>
 
             {/* Options */}
-            {question.options &&
-              question.options.map((option, index) => (
-                <label key={index} className="option-row">
+            {currentQuestion.options &&
+              currentQuestion.options.map((option, index) => (
+                <label
+                  key={index}
+                  className={`option-row ${isBlocked ? "option-disabled" : ""}`}
+                >
                   <input
                     type="radio"
-                    name="answer"
+                    name={`question-${questionId}`}
                     checked={selectedOption === index}
-                    onChange={() => setSelectedOption(index)}
+                    onChange={() => handleOptionSelect(index)}
+                    disabled={isBlocked}
                   />
                   <span>{option}</span>
                 </label>
@@ -125,13 +135,16 @@ function MainExam({ time, onEndTest }) {
 
             {/* Navigation */}
             <div className="navigation-buttons">
-              <button onClick={previousQuestion} disabled={questionId === 1}>
+              <button
+                onClick={previousQuestion}
+                disabled={currentIndex === 0 || isBlocked}
+              >
                 Previous
               </button>
 
               <button
                 onClick={nextQuestion}
-                disabled={questionId === totalQuestions}
+                disabled={currentIndex === totalQuestions - 1 || isBlocked}
               >
                 Next
               </button>
