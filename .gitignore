@@ -26,3 +26,7 @@ dist-ssr
 # Proctoring camera feeds
 cameraFeed/
 electron/cameraFeed/
+Captures/
+CameraCaptures/
+*.jpeg
+*.jpg
