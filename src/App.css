@@ -439,3 +439,172 @@ appearing in the layout.
 
   cursor: not-allowed;
 }
+
+/* =========================
+   Mandatory Requirement Banner & Statuses
+========================= */
+
+.btn:disabled {
+  background: #c2c7cd !important;
+  color: #f0f0f0 !important;
+  cursor: not-allowed !important;
+  transform: none !important;
+}
+
+.mandatory-banner {
+  width: 100%;
+  max-width: 920px;
+  background: #fdf5e6;
+  border: 1px solid #f6cf8a;
+  border-left: 5px solid #d97706;
+  color: #78350f;
+  padding: 14px 20px;
+  border-radius: 8px;
+  margin-bottom: 20px;
+  font-size: 14.5px;
+  line-height: 1.5;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+}
+
+.banner-icon {
+  font-size: 18px;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 14px;
+}
+
+.status-not-ready {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.status-ready {
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.status-error {
+  background: #fee2e2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.validation-error-box {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+  padding: 12px 18px;
+  border-radius: 8px;
+  margin-top: 14px;
+  font-size: 13.5px;
+  line-height: 1.45;
+}
+
+.exam-ended-box {
+  width: 100%;
+  max-width: 920px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  padding: 18px 24px;
+  border-radius: 10px;
+  margin-top: 20px;
+  text-align: left;
+}
+
+.exam-ended-box h3 {
+  font-size: 17px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.exam-ended-box p {
+  font-size: 14.5px;
+  color: #15803d;
+}
+
+/* =========================
+   Fullscreen Recovery Overlay
+========================= */
+
+.recovery-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 24px;
+}
+
+.recovery-card {
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 38px 44px;
+  max-width: 520px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.35);
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.recovery-icon {
+  font-size: 38px;
+  margin-bottom: 14px;
+  color: #dc2626;
+}
+
+.recovery-card h2 {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 12px;
+}
+
+.recovery-card p {
+  font-size: 15px;
+  color: #64748b;
+  line-height: 1.55;
+  margin-bottom: 24px;
+}
+
+.exam-page-blocked {
+  pointer-events: none;
+  user-select: none;
+  filter: blur(2px);
+}
+
+.option-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
