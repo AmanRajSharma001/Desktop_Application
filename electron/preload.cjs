@@ -18,4 +18,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   showExamRules: () => ipcRenderer.invoke("show-rules"),
   showRules: () => ipcRenderer.invoke("show-rules"),
   savePhoto: (arrayBuffer) => ipcRenderer.invoke("save-photo", arrayBuffer),
+  screenShare: (options) => ipcRenderer.invoke("screen-share", options),
+  saveScreenPhoto: (arrayBuffer) => ipcRenderer.invoke("save-screen-photo", arrayBuffer),
+  saveScreenFrame: (arrayBuffer) => ipcRenderer.invoke("save-screen-photo", arrayBuffer),
 });
