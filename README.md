@@ -22,6 +22,11 @@ A secure, proctored desktop examination application built with **Electron**, **R
 - [Directory Structure](#directory-structure)
 - [Electron IPC API Reference](#electron-ipc-api-reference)
 - [macOS Permissions Required](#macos-permissions-required)
+- [macOS Screen Recording Permission](#macos-screen-recording-permission)
+  - [1. Identify Which Application Needs Permission](#1-identify-which-application-needs-permission)
+  - [2. Grant Screen Recording Permission to VS Code](#2-grant-screen-recording-permission-to-vs-code)
+  - [3. Restart and Verify](#3-restart-and-verify)
+  - [4. If No Screens or Windows Are Found](#4-if-no-screens-or-windows-are-found)
 - [Prerequisites & System Requirements](#prerequisites--system-requirements)
 - [Installation & Setup](#installation--setup)
 - [Running the Application](#running-the-application)
@@ -339,19 +344,101 @@ Athena requires two macOS permissions to operate correctly.
 ### 1. Camera Access
 
 - **Required for:** Candidate webcam proctoring.
-- **Grant via:** System Settings → Privacy & Security → Camera → Enable for **Electron**.
+- **Grant via:** System Settings → Privacy & Security → Camera → Enable for **Electron** (or the host environment launching Electron, such as Visual Studio Code or Terminal).
 
 ### 2. Screen Recording
 
 - **Required for:** `desktopCapturer.getSources()` to enumerate screens/windows AND `getUserMedia` with `chromeMediaSource: "desktop"` to capture frames.
-- **Grant via:** System Settings → Privacy & Security → Screen Recording → Enable for **Electron**.
+- **Grant via:** System Settings → Privacy & Security → Screen & System Audio Recording (or Screen Recording). See [macOS Screen Recording Permission](#macos-screen-recording-permission) below for step-by-step instructions and troubleshooting.
 
 > [!IMPORTANT]
 > If Screen Recording permission is **not** granted, `desktopCapturer.getSources()` will return an empty array. The main process detects `systemPreferences.getMediaAccessStatus("screen") === "denied"` and returns:
 >
 > *"Screen Recording permission is denied in macOS System Settings. Please enable Screen Recording in System Settings > Privacy & Security > Screen Recording."*
 >
-> After granting permission, **restart the Electron application** for the change to take effect.
+> After granting permission, **restart the host application** (Visual Studio Code, Terminal, or Electron) for the change to take effect.
+
+---
+
+## macOS Screen Recording Permission
+
+When launching Athena Exam on macOS and attempting screen capture, clicking **"Enable Screen Sharing"** opens the source-selection modal dialog. In some setups, the modal presents the following message:
+
+> **No screens or windows found to share.**
+
+On macOS, system privacy permissions control whether an application can discover and capture window contents or desktop displays. When developing or running Athena Exam—especially when launched from an IDE like **Visual Studio Code**—macOS privacy controls may prevent Electron's `desktopCapturer` from enumerating available screens and windows.
+
+> [!NOTE]
+> Granting macOS Screen Recording permission is an essential troubleshooting step, but missing permission should not be assumed as the definite cause without verification. Follow the identification, restart, and troubleshooting steps below to diagnose and resolve source discovery issues.
+
+### 1. Identify Which Application Needs Permission
+
+The correct permission entry in macOS System Settings depends on how the Electron application is launched:
+
+- **When Electron is launched through Visual Studio Code:** When starting the development server and Electron from the VS Code integrated terminal (or via a VS Code task/debugger) using `npm start`, macOS often attributes the child process activity to **Visual Studio Code**. In this scenario, **Visual Studio Code** is the application that needs Screen Recording permission.
+- **When running a packaged Electron application directly:** If running a built, standalone application bundle (`.app`), the permission belongs to the packaged application itself (e.g., **Athena Exam** or **Electron**).
+- **When launched via an external terminal:** If running `npm start` from a separate terminal emulator (such as macOS `Terminal.app` or `iTerm2`), permission may belong to that terminal application instead.
+- **Depending on the Electron version and capture workflow:** Another application entry, such as a specialized Electron Helper process or the local `electron` binary, may be designated by macOS as the responsible capture process.
+
+Always grant permission to the specific application macOS identifies as responsible for screen capture, rather than blindly enabling unrelated applications.
+
+### 2. Grant Screen Recording Permission to VS Code
+
+If you are running and debugging Athena Exam through Visual Studio Code, follow these steps:
+
+1. Open macOS **System Settings** (from the Apple  menu in the menu bar).
+2. Navigate to **Privacy & Security** in the left sidebar.
+3. Open **Screen & System Audio Recording** (or **Screen Recording** depending on your macOS version). The exact label varies across macOS releases (e.g., macOS Sequoia vs. macOS Sonoma/Ventura).
+4. Find **Visual Studio Code** (or **Code**) in the application list.
+5. Enable its permission toggle (switch to the **ON** position). You may be prompted to enter your macOS administrator password or authenticate with Touch ID.
+6. **If Visual Studio Code is not listed:**
+   - macOS may display the permission request only when an application first attempts a protected operation. You may need to trigger the screen-capture workflow again in Athena Exam (by clicking **"Enable Screen Sharing"**) to prompt macOS to register the permission request.
+   - Alternatively, investigate the appropriate permission entry for the actual process responsible for screen capture (such as your terminal emulator or the Electron executable).
+   - If needed, you can click the **+** (Add) button below the list and select `/Applications/Visual Studio Code.app` manually.
+7. **Quit Visual Studio Code completely and reopen it:** Permission changes in macOS do not take effect dynamically for already-running processes. Quit VS Code completely (`Cmd + Q`), ensure all running processes terminate, and then reopen VS Code.
+8. **Run the Electron application again and retry screen sharing:**
+   ```bash
+   # Terminal 1: Start Vite dev server
+   npm run dev
+
+   # Terminal 2: Start Electron desktop app
+   npm start
+   ```
+   Click **"Enable Screen Sharing"** and retry selecting a source.
+
+### 3. Restart and Verify
+
+Permission changes will not take effect until the host application is restarted. Use this verification checklist before attempting to start an exam:
+
+- [ ] **Quit and reopen the relevant application:** Fully quit (`Cmd + Q`) and relaunch Visual Studio Code (or the terminal/packaged application responsible) after granting permission.
+- [ ] **Start Athena Exam again:** Run `npm run dev` and `npm start` (or `npm start` with a pre-built [`dist/`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/dist) directory).
+- [ ] **Open the screen-sharing selector:** Click **"Enable Screen Sharing"** on the landing page.
+- [ ] **Check whether available screens or windows appear:** Verify that available displays and open application windows populate the modal selection grid with thumbnail previews instead of displaying *"No screens or windows found to share."*
+- [ ] **Select a source and verify that the preview works:** Click a thumbnail to select a screen or window. Verify that the floating screen preview renders, and that `Screen Sharing Status: Ready` appears along with the source name.
+- [ ] **Start the exam only after all requirements are verified:** Ensure Camera (`Ready`), Fullscreen (`Active`), and Screen Sharing (`Ready`) are all verified. The **Start Exam** button unlocks only when all three requirements are met.
+
+### 4. If No Screens or Windows Are Found
+
+If the modal continues to display *"No screens or windows found to share"* or fails to acquire streams, work through the following troubleshooting steps:
+
+1. **Verify the relevant macOS permission:** Check **System Settings > Privacy & Security > Screen & System Audio Recording** to confirm that the toggle next to Visual Studio Code (or your launching terminal) remains enabled.
+2. **Confirm that the application has been restarted:** Confirm that the application has been completely terminated (`Cmd + Q`) and reopened. Toggling permissions while the process remains open in the background will not update the process's runtime entitlements.
+3. **Check the installed Electron version and `desktopCapturer` implementation:** Verify that the installed Electron version matches [`package.json`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/package.json) (`"electron": "^41.7.1"`). Confirm that the [`desktopCapturer.getSources()`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/electron/main.cjs#L266-L270) API options (`types: ["screen", "window"]`) are supported in this version.
+4. **Verify that `desktopCapturer.getSources()` is called correctly without swallowed errors:** Inspect the `"screen-share"` IPC handler in [`electron/main.cjs`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/electron/main.cjs). Ensure that errors returned by `desktopCapturer.getSources()` or [`systemPreferences.getMediaAccessStatus("screen")`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/electron/main.cjs#L247-L257) are properly logged and handled rather than being silently ignored.
+5. **Inspect the Electron main-process and renderer logs:**
+   - Review terminal output where `npm start` is running for any runtime exceptions or rejection messages logged by the main process.
+   - Inspect the renderer console for warnings or failed promises returned through `window.electronAPI.screenShare()`.
+6. **Check whether the source-selection workflow is correctly connected to the media stream:** In [`src/App.jsx`](file:///Users/amanrajsharma/Desktop/Projects_Final/Desktop_Application/src/App.jsx), ensure that the selected `source.id` is correctly passed into `navigator.mediaDevices.getUserMedia({ video: { mandatory: { chromeMediaSource: "desktop", chromeMediaSourceId: source.id } } })` and that the returned video track is alive and attached to the preview video element.
+7. **Test the application outside VS Code:** Test running the application directly from the native macOS `Terminal.app` or `iTerm2` to isolate whether the issue is specific to the launching application:
+   ```bash
+   cd /path/to/Desktop_Application
+   npm run dev &
+   npm start
+   ```
+   If sources appear when launched from macOS Terminal, the permission restriction is isolated to Visual Studio Code's terminal environment.
+
+> [!CAUTION]
+> Never attempt to disable macOS system security features (such as System Integrity Protection / SIP) to bypass permission checks. All camera and screen capture requirements are safely manageable through standard macOS Privacy & Security preferences.
 
 ---
 
