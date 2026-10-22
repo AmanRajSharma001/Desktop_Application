@@ -8,6 +8,10 @@ function App() {
   const imageCaptureRef = useRef(null);
   const isCapturingRef = useRef(false);
 
+  const screenVideoRef = useRef(null);
+  const screenStreamRef = useRef(null);
+  const isScreenCapturingRef = useRef(false);
+
   const [time, setTime] = useState(0);
   const [started, setStarted] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -21,6 +25,13 @@ function App() {
   const [fullscreenStatus, setFullscreenStatus] = useState("Inactive"); // "Inactive" | "Active" | "Error"
   const [fullscreenError, setFullscreenError] = useState("");
 
+  const [screenShareStatus, setScreenShareStatus] = useState("Not Ready"); // "Not Ready" | "Ready" | "Error"
+  const [screenShareError, setScreenShareError] = useState("");
+  const [selectedSourceName, setSelectedSourceName] = useState("");
+  const [availableSources, setAvailableSources] = useState([]);
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
+  const [sourceLoading, setSourceLoading] = useState(false);
+
   const [startError, setStartError] = useState("");
   const [recoveryError, setRecoveryError] = useState("");
 
@@ -30,7 +41,7 @@ function App() {
         try {
           track.stop();
         } catch (e) {
-          console.warn("Error stopping track:", e);
+          console.warn("Error stopping camera track:", e);
         }
       });
       videoStreamRef.current = null;
@@ -42,10 +53,48 @@ function App() {
     setCameraStatus("Not Ready");
   }, []);
 
+  const cleanupScreenShare = useCallback(() => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn("Error stopping screen track:", e);
+        }
+      });
+      screenStreamRef.current = null;
+    }
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+    setSelectedSourceName("");
+    setScreenShareStatus("Not Ready");
+  }, []);
+
+  const handleScreenShareEnded = useCallback(() => {
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn("Error stopping screen track:", e);
+        }
+      });
+      screenStreamRef.current = null;
+    }
+    if (screenVideoRef.current) {
+      screenVideoRef.current.srcObject = null;
+    }
+    setSelectedSourceName("");
+    setScreenShareStatus("Not Ready");
+    setScreenShareError("Screen sharing has stopped. Please share your screen again.");
+  }, []);
+
   // End exam and teardown all hardware/timers
   const handleEndExam = useCallback(
     async (message = "Exam ended.") => {
       cleanupCamera();
+      cleanupScreenShare();
 
       if (window.electronAPI && window.electronAPI.endTest) {
         try {
@@ -60,7 +109,7 @@ function App() {
       setExamEndMessage(message);
       setTime(0);
     },
-    [cleanupCamera]
+    [cleanupCamera, cleanupScreenShare]
   );
 
   // Check initial native fullscreen state and register listener
@@ -137,7 +186,6 @@ function App() {
     setCameraError("");
     setStartError("");
 
-    // Prevent duplicate camera streams: cleanup prior tracks
     if (videoStreamRef.current) {
       videoStreamRef.current.getTracks().forEach((track) => track.stop());
       videoStreamRef.current = null;
@@ -224,6 +272,149 @@ function App() {
     }
   }
 
+  // Open desktopCapturer source selection modal
+  async function handleOpenScreenPicker() {
+    setScreenShareError("");
+    setStartError("");
+    setSourceLoading(true);
+    setShowSourcePicker(true);
+
+    try {
+      if (window.electronAPI && window.electronAPI.screenShare) {
+        const res = await window.electronAPI.screenShare();
+        if (!res || !res.success) {
+          const errorMsg =
+            res?.error ||
+            "Screen sharing is required to take this exam. Please select a screen or window to share.";
+          setScreenShareStatus("Error");
+          setScreenShareError(errorMsg);
+          setSourceLoading(false);
+          return;
+        }
+        setAvailableSources(res.sources || []);
+      } else if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        setShowSourcePicker(false);
+        await acquireScreenStream({ id: "default", name: "Entire Screen" });
+        return;
+      } else {
+        throw new Error("Screen sharing is not supported in this environment.");
+      }
+    } catch (err) {
+      console.error("Error retrieving screen sources:", err);
+      setScreenShareStatus("Error");
+      setScreenShareError(err.message || "Failed to retrieve desktop sources.");
+    } finally {
+      setSourceLoading(false);
+    }
+  }
+
+  // Select desktopCapturer source and obtain media stream
+  async function acquireScreenStream(source) {
+    setScreenShareError("");
+    setStartError("");
+
+    if (screenStreamRef.current) {
+      screenStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch (e) {
+          console.warn("Error stopping screen track:", e);
+        }
+      });
+      screenStreamRef.current = null;
+    }
+
+    try {
+      let stream = null;
+
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia && source.id !== "default") {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: false,
+            video: {
+              mandatory: {
+                chromeMediaSource: "desktop",
+                chromeMediaSourceId: source.id,
+                maxWidth: window.screen?.width || 1920,
+                maxHeight: window.screen?.height || 1080,
+              },
+            },
+          });
+        } catch (mediaErr) {
+          console.warn("getUserMedia with desktop constraints failed, trying simplified constraints:", mediaErr);
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              audio: false,
+              video: {
+                mandatory: {
+                  chromeMediaSource: "desktop",
+                  chromeMediaSourceId: source.id,
+                },
+              },
+            });
+          } catch (innerErr) {
+            if (navigator.mediaDevices.getDisplayMedia) {
+              stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+            } else {
+              throw innerErr;
+            }
+          }
+        }
+      } else if (navigator.mediaDevices && navigator.mediaDevices.getDisplayMedia) {
+        stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
+      } else {
+        throw new Error("Screen sharing is not supported on this platform.");
+      }
+
+      if (!stream) {
+        throw new Error("Failed to obtain screen sharing stream.");
+      }
+
+      const tracks = stream.getVideoTracks();
+      if (!tracks || tracks.length === 0) {
+        throw new Error("No video tracks found in screen sharing stream.");
+      }
+
+      const track = tracks[0];
+      if (track.readyState !== "live") {
+        throw new Error(`Screen video track is not live (${track.readyState}).`);
+      }
+
+      // Bind track ended listener
+      track.onended = () => {
+        handleScreenShareEnded();
+      };
+
+      screenStreamRef.current = stream;
+      setSelectedSourceName(source.name || "Screen");
+
+      if (screenVideoRef.current) {
+        screenVideoRef.current.srcObject = stream;
+        try {
+          await screenVideoRef.current.play();
+        } catch (playErr) {
+          console.warn("Screen video play error:", playErr);
+        }
+      }
+
+      setScreenShareStatus("Ready");
+      setScreenShareError("");
+    } catch (err) {
+      console.error("Screen stream acquisition error:", err);
+      setScreenShareStatus("Error");
+      let msg = err.message || "Failed to start screen sharing.";
+      if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+        msg = "Screen sharing permission was denied. Please select a screen or window to share.";
+      }
+      setScreenShareError(msg);
+    }
+  }
+
+  async function handleSelectSource(source) {
+    setShowSourcePicker(false);
+    await acquireScreenStream(source);
+  }
+
   // Camera snapshot proctoring: fires every 5s during active verified exam
   async function clickPhoto() {
     if (isCapturingRef.current) return;
@@ -270,9 +461,47 @@ function App() {
     }
   }
 
+  // Screen snapshot proctoring: fires every 5s during active verified exam
+  async function captureScreenFrame() {
+    if (isScreenCapturingRef.current) return;
+    isScreenCapturingRef.current = true;
+
+    try {
+      const track = screenStreamRef.current?.getVideoTracks()[0];
+      if (!track || track.readyState !== "live" || !track.enabled) {
+        return;
+      }
+
+      const video = screenVideoRef.current;
+      if (!video || video.videoWidth === 0 || video.videoHeight === 0) {
+        return;
+      }
+
+      const canvas = document.createElement("canvas");
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, "image/jpeg", 0.85)
+      );
+
+      if (blob && window.electronAPI && window.electronAPI.saveScreenPhoto) {
+        const buffer = await blob.arrayBuffer();
+        await window.electronAPI.saveScreenPhoto(buffer);
+      }
+    } catch (err) {
+      console.warn("Screen snapshot capture error:", err);
+    } finally {
+      isScreenCapturingRef.current = false;
+    }
+  }
+
+  // Camera proctoring capture interval
   useEffect(() => {
-    // Captures only occur during started exam when fullscreen is active
-    if (!started || fullscreenStatus !== "Active") return;
+    if (!started || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
 
     const id = setInterval(() => {
       clickPhoto();
@@ -281,9 +510,22 @@ function App() {
     return () => {
       clearInterval(id);
     };
-  }, [started, fullscreenStatus]);
+  }, [started, fullscreenStatus, screenShareStatus]);
 
-  // Start exam with strict revalidation of both prerequisites
+  // Screen sharing proctoring capture interval
+  useEffect(() => {
+    if (!started || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
+
+    const id = setInterval(() => {
+      captureScreenFrame();
+    }, 5000);
+
+    return () => {
+      clearInterval(id);
+    };
+  }, [started, fullscreenStatus, screenShareStatus]);
+
+  // Start exam with strict revalidation of all three prerequisites
   async function startTest() {
     if (isStarting) return;
     setIsStarting(true);
@@ -302,10 +544,10 @@ function App() {
       if (!isCameraActive) {
         setCameraStatus("Error");
         setCameraError(
-          "Camera is not active. Please re-enable camera access before starting."
+          "Camera access is required to take this exam."
         );
         setStartError(
-          "Cannot start exam: Camera stream or track is inactive. Please click 'Enable Camera' and ensure your camera is working."
+          "Cannot start exam: Camera access is required to take this exam. Please click 'Enable Camera' and ensure your camera is working."
         );
         setIsStarting(false);
         return;
@@ -323,7 +565,28 @@ function App() {
       if (!isNativeFullscreen) {
         setFullscreenStatus("Inactive");
         setStartError(
-          "Cannot start exam: Fullscreen is not active. Please click 'Enter Fullscreen' before starting."
+          "Cannot start exam: Fullscreen mode is required to take this exam. Please click 'Enter Fullscreen' before starting."
+        );
+        setIsStarting(false);
+        return;
+      }
+
+      // 3. Revalidate Screen Sharing
+      const screenTrack = screenStreamRef.current?.getVideoTracks()[0];
+      const isScreenShareActive = Boolean(
+        screenStreamRef.current &&
+          screenTrack &&
+          screenTrack.readyState === "live" &&
+          screenTrack.enabled
+      );
+
+      if (!isScreenShareActive) {
+        setScreenShareStatus("Not Ready");
+        setScreenShareError(
+          "Screen sharing is required to take this exam. Please select a screen or window to share."
+        );
+        setStartError(
+          "Cannot start exam: Screen sharing is required to take this exam. Please click 'Enable Screen Sharing' and select a screen or window."
         );
         setIsStarting(false);
         return;
@@ -333,7 +596,6 @@ function App() {
       if (window.electronAPI && window.electronAPI.showExamRules) {
         const res = await window.electronAPI.showExamRules();
         if (res !== 1) {
-          // User clicked Cancel or dismissed
           setIsStarting(false);
           return;
         }
@@ -391,11 +653,18 @@ function App() {
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  const isExamBlocked = started && fullscreenStatus !== "Active";
-  const canStartExam = cameraStatus === "Ready" && fullscreenStatus === "Active" && !isStarting;
+  const isFullscreenBlocked = started && fullscreenStatus !== "Active";
+  const isScreenShareBlocked = started && screenShareStatus !== "Ready";
+  const isExamBlocked = isFullscreenBlocked || isScreenShareBlocked;
+  const canStartExam =
+    cameraStatus === "Ready" &&
+    fullscreenStatus === "Active" &&
+    screenShareStatus === "Ready" &&
+    !isStarting;
 
   return (
     <>
+      {/* Floating camera preview (active on setup, hidden during exam) */}
       <video
         ref={videoRef}
         autoPlay
@@ -404,23 +673,113 @@ function App() {
         className={cameraStatus === "Ready" && !started ? "video-preview" : "hidden-video"}
       />
 
-      {/* Fullscreen Recovery Overlay during active exam */}
+      {/* Screen video capture element (always mounted to maintain stream decoding) */}
+      <video
+        ref={screenVideoRef}
+        autoPlay
+        muted
+        playsInline
+        className="hidden-video"
+      />
+
+      {/* Interruption Recovery Overlay during active exam */}
       {isExamBlocked && (
         <div className="recovery-overlay">
-          <div className="recovery-card">
-            <div className="recovery-icon">⛶</div>
-            <h2>Fullscreen Mode Exited</h2>
-            <p>
-              Fullscreen is mandatory during the exam. Question navigation and answer selection are blocked until fullscreen is restored.
-            </p>
-            {recoveryError && (
-              <div className="validation-error-box" style={{ marginBottom: "16px" }}>
-                {recoveryError}
+          {isFullscreenBlocked ? (
+            <div className="recovery-card">
+              <div className="recovery-icon">⛶</div>
+              <h2>Fullscreen Mode Exited</h2>
+              <p>
+                Fullscreen mode is required to take this exam. Question navigation and answer selection are blocked until fullscreen is restored.
+              </p>
+              {recoveryError && (
+                <div className="validation-error-box" style={{ marginBottom: "16px" }}>
+                  {recoveryError}
+                </div>
+              )}
+              <button onClick={handleRecoverFullscreen} className="btn btn-light-blue">
+                Re-enter Fullscreen
+              </button>
+            </div>
+          ) : isScreenShareBlocked ? (
+            <div className="recovery-card">
+              <div className="recovery-icon">🖥️</div>
+              <h2>Screen Sharing Stopped</h2>
+              <p>
+                Screen sharing has stopped. Please share your screen again. Question navigation and answer selection are blocked until screen sharing is active.
+              </p>
+              {screenShareError && (
+                <div className="validation-error-box" style={{ marginBottom: "16px" }}>
+                  {screenShareError}
+                </div>
+              )}
+              <button onClick={handleOpenScreenPicker} className="btn btn-dark">
+                Resume Screen Sharing
+              </button>
+            </div>
+          ) : null}
+        </div>
+      )}
+
+      {/* Desktop Capturer Source Selection Modal */}
+      {showSourcePicker && (
+        <div className="source-picker-overlay">
+          <div className="source-picker-card">
+            <div className="source-picker-header">
+              <h2>Select Screen or Window to Share</h2>
+              <p>Screen sharing is required to take this exam. Please select a screen or window to share.</p>
+            </div>
+
+            {sourceLoading ? (
+              <div className="source-loading-state">
+                <p>Retrieving available desktop capture sources...</p>
+              </div>
+            ) : availableSources.length === 0 ? (
+              <div className="source-empty-state">
+                <p>No screens or windows found to share.</p>
+              </div>
+            ) : (
+              <div className="source-grid">
+                {availableSources.map((source) => (
+                  <div
+                    key={source.id}
+                    className="source-item"
+                    onClick={() => handleSelectSource(source)}
+                  >
+                    <div className="source-thumb-container">
+                      {source.thumbnail ? (
+                        <img
+                          src={source.thumbnail}
+                          alt={source.name}
+                          className="source-thumb-img"
+                        />
+                      ) : (
+                        <div className="source-thumb-placeholder">🖥️</div>
+                      )}
+                    </div>
+                    <div className="source-info">
+                      <span className="source-name" title={source.name}>
+                        {source.name}
+                      </span>
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
-            <button onClick={handleRecoverFullscreen} className="btn btn-light-blue">
-              Re-enter Fullscreen
-            </button>
+
+            <div className="source-picker-actions">
+              <button
+                onClick={() => {
+                  setShowSourcePicker(false);
+                  if (screenShareStatus !== "Ready") {
+                    setScreenShareStatus("Not Ready");
+                  }
+                }}
+                className="btn btn-outline"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -441,7 +800,7 @@ function App() {
           <div className="mandatory-banner">
             <span className="banner-icon">⚠️</span>
             <span>
-              <strong>Before starting the exam, you must enable your camera and enter fullscreen. Both are mandatory.</strong>
+              <strong>Before starting the exam, you must enable your camera, enter fullscreen, and share your screen. All three are mandatory.</strong>
             </span>
           </div>
 
@@ -451,7 +810,7 @@ function App() {
               <div className="permission-icon">↗</div>
               <div className="permission-content">
                 <h3>Configure Camera</h3>
-                <p>Kindly configure Camera to attempt quiz/contests.</p>
+                <p>Camera access is required to take this exam.</p>
                 <div className="action-row">
                   <button onClick={getCamera} className="btn btn-dark">
                     Enable Camera
@@ -485,7 +844,7 @@ function App() {
               <div className="permission-icon">⛶</div>
               <div className="permission-content">
                 <h3>Switch to full screen</h3>
-                <p>Kindly close all tabs and switch to full screen.</p>
+                <p>Fullscreen mode is required to take this exam.</p>
                 <div className="action-row">
                   <button onClick={getFullscreen} className="btn btn-light-blue">
                     Enter Fullscreen
@@ -506,6 +865,44 @@ function App() {
 
                 {fullscreenError && (
                   <div className="validation-error-box">{fullscreenError}</div>
+                )}
+              </div>
+            </div>
+
+            <div className="divider" />
+
+            {/* Screen Sharing Permission Item */}
+            <div className="permission-item">
+              <div className="permission-icon">🖥️</div>
+              <div className="permission-content">
+                <h3>Configure Screen Sharing</h3>
+                <p>Screen sharing is required to take this exam. Please select a screen or window to share.</p>
+                <div className="action-row">
+                  <button onClick={handleOpenScreenPicker} className="btn btn-dark">
+                    Enable Screen Sharing
+                  </button>
+                </div>
+
+                <div
+                  className={`status-badge ${
+                    screenShareStatus === "Ready"
+                      ? "status-ready"
+                      : screenShareStatus === "Error"
+                      ? "status-error"
+                      : "status-not-ready"
+                  }`}
+                >
+                  Screen Sharing Status: {screenShareStatus}
+                </div>
+
+                {selectedSourceName && screenShareStatus === "Ready" && (
+                  <p className="selected-source-text">
+                    Screen sharing is active. Selected: <strong>{selectedSourceName}</strong>
+                  </p>
+                )}
+
+                {screenShareError && (
+                  <div className="validation-error-box">{screenShareError}</div>
                 )}
               </div>
             </div>
