@@ -1,4 +1,4 @@
-const { BrowserWindow, app, ipcMain, dialog } = require("electron");
+const { BrowserWindow, app, ipcMain, dialog, desktopCapturer, systemPreferences } = require("electron");
 const path = require("path");
 const fs = require("fs");
 
@@ -119,12 +119,16 @@ function handleFullscreenExit() {
 }
 
 function createWindow() {
+  const preloadPath = fs.existsSync(path.join(__dirname, "preload.js"))
+    ? path.join(__dirname, "preload.js")
+    : path.join(__dirname, "preload.cjs");
+
   win = new BrowserWindow({
     width: 1000,
     height: 700,
     frame: false,
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: preloadPath,
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -233,6 +237,103 @@ ipcMain.handle("save-photo", async (_, arrayBuffer) => {
     return { success: true, filePath };
   } catch (err) {
     console.error("Error saving photo snapshot:", err);
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle("screen-share", async () => {
+  try {
+    // Check macOS screen recording permission
+    if (process.platform === "darwin" && typeof systemPreferences?.getMediaAccessStatus === "function") {
+      const accessStatus = systemPreferences.getMediaAccessStatus("screen");
+      if (accessStatus === "denied") {
+        return {
+          success: false,
+          error: "Screen Recording permission is denied in macOS System Settings. Please enable Screen Recording in System Settings > Privacy & Security > Screen Recording.",
+          permissionDenied: true,
+          status: accessStatus,
+        };
+      }
+    }
+
+    if (!desktopCapturer || typeof desktopCapturer.getSources !== "function") {
+      return {
+        success: false,
+        error: "desktopCapturer API is unavailable in this environment.",
+      };
+    }
+
+    const sources = await desktopCapturer.getSources({
+      types: ["screen", "window"],
+      thumbnailSize: { width: 320, height: 180 },
+      fetchWindowIcons: true,
+    });
+
+    if (!sources || sources.length === 0) {
+      return {
+        success: false,
+        error: "No desktop or window capture sources found.",
+        sources: [],
+      };
+    }
+
+    const sanitizedSources = sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      display_id: source.display_id,
+      thumbnail: source.thumbnail ? source.thumbnail.toDataURL() : null,
+      appIcon: source.appIcon ? source.appIcon.toDataURL() : null,
+    }));
+
+    return {
+      success: true,
+      sources: sanitizedSources,
+    };
+  } catch (err) {
+    console.error("Error retrieving desktop sources:", err);
+    return {
+      success: false,
+      error: err.message || "Failed to retrieve desktop sources",
+      sources: [],
+    };
+  }
+});
+
+ipcMain.handle("save-screen-photo", async (_, arrayBuffer) => {
+  try {
+    if (!arrayBuffer || !(arrayBuffer.byteLength > 0)) {
+      return { success: false, error: "Empty or invalid buffer" };
+    }
+
+    // Exact requested development destination: electron/ScreenFeed
+    let screenFeedDir = path.join(__dirname, "ScreenFeed");
+
+    if (app && app.isPackaged) {
+      try {
+        if (!fs.existsSync(screenFeedDir)) {
+          fs.mkdirSync(screenFeedDir, { recursive: true });
+        }
+        fs.accessSync(screenFeedDir, fs.constants.W_OK);
+      } catch {
+        screenFeedDir = path.join(app.getPath("userData"), "ScreenFeed");
+      }
+    }
+
+    if (!fs.existsSync(screenFeedDir)) {
+      fs.mkdirSync(screenFeedDir, { recursive: true });
+    }
+
+    const randomSalt = Math.random().toString(36).slice(2, 8);
+    const fileName = `screen_${Date.now()}_${randomSalt}.jpeg`;
+    // Prevent path traversal
+    const safeName = path.basename(fileName);
+    const filePath = path.join(screenFeedDir, safeName);
+
+    const buffer = Buffer.from(arrayBuffer);
+    await fs.promises.writeFile(filePath, buffer);
+    return { success: true, filePath };
+  } catch (err) {
+    console.error("Error saving screen snapshot:", err);
     return { success: false, error: err.message };
   }
 });

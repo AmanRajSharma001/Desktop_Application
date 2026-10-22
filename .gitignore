@@ -28,5 +28,10 @@ cameraFeed/
 electron/cameraFeed/
 Captures/
 CameraCaptures/
+
+# Proctoring screen feeds
+ScreenFeed/
+electron/ScreenFeed/
+
 *.jpeg
 *.jpg
