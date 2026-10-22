@@ -501,49 +501,6 @@ npm start       # Electron falls back to dist/index.html if :5173 unavailable
 ```bash
 npm test
 ```
-
-Runs **30 tests** across two files using Node's built-in test runner.
-
-### Day 2 — `exam_enforcement.test.js` (12 scenarios)
-
-| # | Scenario | Result |
-| :--- | :--- | :--- |
-| 1 | Neither prerequisite satisfied → Start Exam blocked | ✅ Pass |
-| 2 | Camera ready, fullscreen inactive → blocked | ✅ Pass |
-| 3 | Fullscreen active, camera track ended/disabled → blocked | ✅ Pass |
-| 4 | Both prerequisites satisfied → allowed | ✅ Pass |
-| 5 | Escape during active exam → `preventDefault()` | ✅ Pass |
-| 6 | Fullscreen exited via OS gesture → detected | ✅ Pass |
-| 7 | Successful fullscreen auto-recovery | ✅ Pass |
-| 8 | Failed recovery → MCQ inputs blocked | ✅ Pass |
-| 9 | Camera permission denial → descriptive error | ✅ Pass |
-| 10 | Camera snapshot → correct file written to `cameraFeed/` | ✅ Pass |
-| 11 | Answer persistence across question navigation | ✅ Pass |
-| 12 | Exam termination → intervals cleared, tracks stopped | ✅ Pass |
-
-### Day 3 — `day3_screen_sharing.test.js` (18 scenarios)
-
-| # | Scenario | Result |
-| :--- | :--- | :--- |
-| 1 | Landing page exposes three mandatory requirement sections | ✅ Pass |
-| 2 | Start Exam disabled when camera unavailable | ✅ Pass |
-| 3 | Start Exam disabled when fullscreen inactive | ✅ Pass |
-| 4 | Start Exam disabled when screen sharing not approved | ✅ Pass |
-| 5 | Start Exam enabled only when all three verified | ✅ Pass |
-| 6 | `window.electronAPI.screenShare` exists; IPC wiring verified in source | ✅ Pass |
-| 7 | Desktop sources retrieved and source selected (mock) | ✅ Pass |
-| 8 | Valid screen-sharing stream obtained (mock track) | ✅ Pass |
-| 9 | Screen snapshot written to `electron/ScreenFeed/` | ✅ Pass |
-| 10 | Screen filenames are unique (timestamp + random salt) | ✅ Pass |
-| 11 | Camera and screen capture destinations are different paths | ✅ Pass |
-| 12 | Screen captures not triggered before exam starts | ✅ Pass |
-| 13 | Screen captures stop when screen sharing ends | ✅ Pass |
-| 14 | Exam blocks MCQ interaction when screen sharing lost | ✅ Pass |
-| 15 | Resuming screen sharing preserves timer and answers | ✅ Pass |
-| 16 | Resuming screen sharing creates no duplicate intervals | ✅ Pass |
-| 17 | Exam completion stops all loops and releases media | ✅ Pass |
-| 18 | Day 2 MCQ, timer, camera, and fullscreen behavior intact | ✅ Pass |
-
 ### Manual Verification (Electron Runtime Required)
 
 The following steps require a running Electron instance and macOS Screen Recording permission:
