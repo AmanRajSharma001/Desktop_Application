@@ -1,6 +1,6 @@
-# Package Installation Log — Day 1
+# Package Installation Log
 
-This log records all dependencies used in the Athena Exam Desktop Application foundation on Day 1.
+This log records all dependencies used across all phases of the Athena Exam Desktop Application foundation.
 
 ## Runtime Dependencies (`dependencies`)
 
@@ -24,6 +24,10 @@ This log records all dependencies used in the Athena Exam Desktop Application fo
 | `@types/react` | `^19.2.18` (`19.2.18`) | Dev | TypeScript type definitions for React | `npm install` (from preserved `package.json`) |
 | `@types/react-dom` | `^19.2.7` (`19.2.7`) | Dev | TypeScript type definitions for React DOM | `npm install` (from preserved `package.json`) |
 
-## Deferred Dependencies (Not Installed on Day 1)
+## Day 4 Architectural Evaluation: Built-in Node.js Backend
 
-As per Day 1 boundary rules, backend dependencies (`express`, `cors`, `prisma`, `postgresql`, etc.) from Repository 2 (`athena-exam`) are deferred until Day 2+ to prevent bloating today's desktop foundation.
+On **Day 4**, the backend integration was implemented natively using standard Node.js runtime modules (`node:http`, `node:fs`, `node:path`, `node:url`):
+
+- **Zero External Dependencies:** Built without external `express` or `cors` npm packages to eliminate dependency bloat, reduce supply chain vulnerabilities, and enable fully deterministic execution in isolated environments.
+- **Data Persistence:** Lightweight, reliable JSON storage implemented in `backend/data/questions.json` and `backend/data/sessions.json`.
+- **Runtime Scripts:** Added `"server": "node backend/server.js"` to `package.json` for independent execution.
