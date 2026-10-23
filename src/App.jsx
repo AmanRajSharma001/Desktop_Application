@@ -17,6 +17,7 @@ function App() {
   const [isStarting, setIsStarting] = useState(false);
   const [examEnded, setExamEnded] = useState(false);
   const [examEndMessage, setExamEndMessage] = useState("");
+  const [isTimeExpired, setIsTimeExpired] = useState(false);
 
   // Prerequisites status
   const [cameraStatus, setCameraStatus] = useState("Not Ready"); // "Not Ready" | "Ready" | "Error"
@@ -107,6 +108,7 @@ function App() {
       setStarted(false);
       setExamEnded(true);
       setExamEndMessage(message);
+      setIsTimeExpired(false);
       setTime(0);
     },
     [cleanupCamera, cleanupScreenShare]
@@ -163,7 +165,7 @@ function App() {
           if (isMounted) {
             setTime(remaining);
             if (remaining <= 0) {
-              handleEndExam("Exam time has expired. Your assessment has concluded.");
+              setIsTimeExpired(true);
             }
           }
         } catch (err) {
@@ -603,9 +605,13 @@ function App() {
 
       // Start authoritative countdown timer in main process
       if (window.electronAPI && window.electronAPI.startTest) {
-        await window.electronAPI.startTest();
+        const endTime = await window.electronAPI.startTest();
+        if (endTime) {
+          setTime(Math.max(0, endTime - Date.now()));
+        }
       }
 
+      setIsTimeExpired(false);
       setStarted(true);
       setExamEnded(false);
     } catch (err) {
@@ -789,6 +795,7 @@ function App() {
           time={formatTimeLeft(time)}
           onEndTest={() => handleEndExam("You have submitted and concluded the exam.")}
           isBlocked={isExamBlocked}
+          isTimeExpired={isTimeExpired}
         />
       ) : (
         <div className="page-container">
