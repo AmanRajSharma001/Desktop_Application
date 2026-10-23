@@ -508,33 +508,6 @@ Run the full automated test suite using Node's built-in test runner:
 ```bash
 npm test
 ```
-
-Executes **42 tests** across three test suites with **0 failures**:
-
-```text
-✔ Day 2 — test/exam_enforcement.test.js (12 scenarios passing)
-✔ Day 3 — test/day3_screen_sharing.test.js (18 scenarios passing)
-✔ Day 4 — test/day4_lifecycle_submission.test.js (12 scenarios passing)
-ℹ tests 42 | pass 42 | fail 0 | cancelled 0
-```
-
-### Day 4 Test Scenarios (`day4_lifecycle_submission.test.js`)
-
-| # | Scenario | Verification Goal | Result |
-| :--- | :--- | :--- | :--- |
-| 4.1 | Backend server healthcheck | `GET /health` returns `{ status: "ok" }` | ✅ Pass |
-| 4.2 | Secret answer key confidentiality | `GET /exam/mcq/all` strips `correctAnswer` & `explanation` | ✅ Pass |
-| 4.3 | Single question retrieval & 404s | `GET /exam/mcq/:id` handles valid and missing IDs | ✅ Pass |
-| 4.4 | Session initialization | `POST /exam/start` creates valid session record | ✅ Pass |
-| 4.5 | Payload validation | `POST /exam/submit` rejects missing `sessionId` or `answers` | ✅ Pass |
-| 4.6 | Trusted backend scoring | Compares answers against key and records attempt in `sessions.json` | ✅ Pass |
-| 4.7 | Duplicate submission prevention | Returns HTTP 409 Conflict if session already submitted | ✅ Pass |
-| 4.8 | MCQ question loading & fallback | Fetches backend questions; falls back cleanly if server unreachable | ✅ Pass |
-| 4.9 | Answer selection & navigation persistence | Option changes update state; answers preserved across question back/forward | ✅ Pass |
-| 4.10 | Submission workflow & concurrency lock | Prevents concurrent duplicate clicks; blocks edits after submission | ✅ Pass |
-| 4.11 | Timer expiration auto-submission | Auto-triggers submission when timer reaches zero; blocks re-submission | ✅ Pass |
-| 4.12 | Preserved Day 2 & 3 integrity | 3-way pre-flight check, recovery overlay, and resource teardown verified | ✅ Pass |
-
 ---
 
 ## Known Limitations
