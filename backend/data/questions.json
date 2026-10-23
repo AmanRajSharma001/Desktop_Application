@@ -1,0 +1,122 @@
+[
+  {
+    "id": 1,
+    "question": "Which Electron process is responsible for creating and managing BrowserWindow instances?",
+    "options": [
+      "Renderer Process",
+      "Main Process",
+      "React Fiber Process",
+      "Preload Script"
+    ],
+    "correctAnswer": 1,
+    "explanation": "BrowserWindow instances can only be created and managed inside Electron's Main Process."
+  },
+  {
+    "id": 2,
+    "question": "Which Electron API is commonly exposed via contextBridge to invoke IPC handlers in the main process?",
+    "options": [
+      "ipcRenderer.invoke",
+      "BrowserWindow.loadURL",
+      "child_process.execSync",
+      "dialog.showMessageBox"
+    ],
+    "correctAnswer": 0,
+    "explanation": "ipcRenderer.invoke() sends an asynchronous request to the main process via ipcMain.handle()."
+  },
+  {
+    "id": 3,
+    "question": "Why is a preload script essential for security in modern Electron desktop applications?",
+    "options": [
+      "To style the React single page application with CSS",
+      "To securely expose controlled APIs to the renderer while keeping contextIsolation enabled",
+      "To create the Express backend database connection",
+      "To compile JSX code into Webpack bundles"
+    ],
+    "correctAnswer": 1,
+    "explanation": "Preload scripts use contextBridge to expose selective, guarded APIs to an isolated renderer."
+  },
+  {
+    "id": 4,
+    "question": "Which HTTP method is semantically expected for submitting an examination answer payload?",
+    "options": [
+      "GET",
+      "HEAD",
+      "POST",
+      "DELETE"
+    ],
+    "correctAnswer": 2,
+    "explanation": "POST is used to submit data payloads that modify server state, such as submitting exam answers."
+  },
+  {
+    "id": 5,
+    "question": "In Electron's security model, why should nodeIntegration be set to false?",
+    "options": [
+      "To prevent malicious or injected client scripts from executing arbitrary Node.js and system commands",
+      "To accelerate React virtual DOM reconciliation",
+      "To disable HTTP fetch requests in the browser",
+      "To automatically maximize the application window"
+    ],
+    "correctAnswer": 0,
+    "explanation": "Disabling nodeIntegration ensures Chromium web pages cannot execute Node.js filesystem or OS commands."
+  },
+  {
+    "id": 6,
+    "question": "Which Electron module is used to enumerate capture sources like displays and windows for screen sharing?",
+    "options": [
+      "screenSnapper",
+      "desktopCapturer",
+      "mediaStreamBridge",
+      "webFrame"
+    ],
+    "correctAnswer": 1,
+    "explanation": "desktopCapturer.getSources() provides access to available screens and application windows."
+  },
+  {
+    "id": 7,
+    "question": "When storing proctoring snapshots locally, which technique prevents path traversal vulnerabilities?",
+    "options": [
+      "Evaluating filenames with eval()",
+      "Sanitizing paths with path.basename() and validating the base destination directory",
+      "Using relative paths with ../../ everywhere",
+      "Disabling file write permissions on the operating system"
+    ],
+    "correctAnswer": 1,
+    "explanation": "Using path.basename() strips arbitrary directory traversal prefixes like ../ from filenames."
+  },
+  {
+    "id": 8,
+    "question": "What is the primary benefit of storing answers by stable question ID rather than array position?",
+    "options": [
+      "It allows answers to remain consistently mapped even if question ordering, filtering, or pagination changes",
+      "It makes the React bundle smaller",
+      "It eliminates the need for CSS styling",
+      "It encrypts the answers automatically"
+    ],
+    "correctAnswer": 0,
+    "explanation": "Stable IDs prevent answer misalignment when questions are filtered, navigated, or reordered."
+  },
+  {
+    "id": 9,
+    "question": "In an examination application, why should score calculation be executed on the backend rather than the client?",
+    "options": [
+      "Because web browsers cannot perform basic addition",
+      "To prevent candidates from inspecting answer keys or tampering with their own scores",
+      "Because Electron does not support JavaScript math operators",
+      "To force candidates to use a specific browser"
+    ],
+    "correctAnswer": 1,
+    "explanation": "Scoring in a trusted backend guarantees tamper resistance and keeps answer keys confidential."
+  },
+  {
+    "id": 10,
+    "question": "When an exam timer reaches zero, what is the required application behavior?",
+    "options": [
+      "Silently delete all candidate answers and close the window",
+      "Lock further answer edits, trigger submission at most once, and display completion status",
+      "Reset the timer back to 60 minutes and restart the exam",
+      "Crash the Electron process"
+    ],
+    "correctAnswer": 1,
+    "explanation": "Timer expiration should freeze input, execute a single submission, and transition to the results screen."
+  }
+]
