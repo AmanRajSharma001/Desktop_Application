@@ -33,5 +33,8 @@ CameraCaptures/
 ScreenFeed/
 electron/ScreenFeed/
 
+# Build and release packaging artifacts
+release/
+
 *.jpeg
 *.jpg

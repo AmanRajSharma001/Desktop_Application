@@ -8,6 +8,20 @@ let examActive = false;
 let autoRecoveryAttempts = 0;
 const MAX_AUTO_RECOVERY = 1;
 let recoveryTimer = null;
+let backendServer = null;
+
+// Embedded backend server initialization for standalone / packaged execution
+try {
+  const backendPath = path.join(__dirname, "../backend/server.js");
+  if (fs.existsSync(backendPath)) {
+    const backend = require(backendPath);
+    if (backend && typeof backend.startServer === "function") {
+      backendServer = backend.startServer(3000);
+    }
+  }
+} catch (e) {
+  console.log("Embedded backend initialization notice:", e.message);
+}
 
 function getFullscreenState() {
   if (!win || win.isDestroyed()) {
@@ -134,12 +148,19 @@ function createWindow() {
     },
   });
 
-  win.loadURL("http://localhost:5173/").catch(() => {
+  if (app.isPackaged) {
     const fallbackPath = path.join(__dirname, "../dist/index.html");
     if (fs.existsSync(fallbackPath)) {
       win.loadFile(fallbackPath);
     }
-  });
+  } else {
+    win.loadURL("http://localhost:5173/").catch(() => {
+      const fallbackPath = path.join(__dirname, "../dist/index.html");
+      if (fs.existsSync(fallbackPath)) {
+        win.loadFile(fallbackPath);
+      }
+    });
+  }
 
   // Native fullscreen and kiosk event listeners
   win.on("enter-full-screen", handleFullscreenEnter);
@@ -368,5 +389,15 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
     app.quit();
+  }
+});
+
+app.on("will-quit", () => {
+  if (backendServer && typeof backendServer.close === "function") {
+    try {
+      backendServer.close();
+    } catch {
+      // ignore
+    }
   }
 });

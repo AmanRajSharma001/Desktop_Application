@@ -370,9 +370,20 @@ function createServer(options = {}) {
 
 function startServer(port = process.env.PORT || 3000) {
   const server = createServer();
-  server.listen(port, () => {
-    console.log(`Athena Exam Backend running at http://localhost:${port}/`);
+  server.on("error", (err) => {
+    if (err.code === "EADDRINUSE") {
+      console.log(`Athena Exam Backend: Port ${port} is already in use; reusing running instance.`);
+    } else {
+      console.error("Athena Exam Backend server error:", err);
+    }
   });
+  try {
+    server.listen(port, () => {
+      console.log(`Athena Exam Backend running at http://localhost:${port}/`);
+    });
+  } catch (err) {
+    console.log("Server listen notice:", err.message);
+  }
   return server;
 }
 
