@@ -159,7 +159,9 @@ function createWindow() {
     }
   });
 
-  win.webContents.openDevTools({ mode: "detach" });
+  if (!app.isPackaged && process.env.ENABLE_DEVTOOLS === "true") {
+    win.webContents.openDevTools({ mode: "detach" });
+  }
 }
 
 // IPC Handlers
@@ -226,12 +228,27 @@ ipcMain.handle("save-photo", async (_, arrayBuffer) => {
       return { success: false, error: "Empty or invalid buffer" };
     }
 
-    const feedDir = path.join(__dirname, "cameraFeed");
+    let feedDir = path.join(__dirname, "cameraFeed");
+
+    if (app && app.isPackaged) {
+      try {
+        if (!fs.existsSync(feedDir)) {
+          fs.mkdirSync(feedDir, { recursive: true });
+        }
+        fs.accessSync(feedDir, fs.constants.W_OK);
+      } catch {
+        feedDir = path.join(app.getPath("userData"), "cameraFeed");
+      }
+    }
+
     if (!fs.existsSync(feedDir)) {
       fs.mkdirSync(feedDir, { recursive: true });
     }
 
-    const filePath = path.join(feedDir, `${Date.now()}.jpeg`);
+    const randomSalt = Math.random().toString(36).slice(2, 8);
+    const fileName = `camera_${Date.now()}_${randomSalt}.jpeg`;
+    const safeName = path.basename(fileName);
+    const filePath = path.join(feedDir, safeName);
     const buffer = Buffer.from(arrayBuffer);
     await fs.promises.writeFile(filePath, buffer);
     return { success: true, filePath };
@@ -272,7 +289,7 @@ ipcMain.handle("screen-share", async () => {
     if (!sources || sources.length === 0) {
       return {
         success: false,
-        error: "No desktop or window capture sources found.",
+        error: "No desktop or window capture sources found. On macOS, ensure Screen Recording permission is granted under System Settings > Privacy & Security > Screen Recording.",
         sources: [],
       };
     }

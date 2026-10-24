@@ -22,6 +22,9 @@ function readQuestions() {
       return [];
     }
     const raw = fs.readFileSync(QUESTIONS_FILE, "utf8");
+    if (!raw || !raw.trim()) {
+      return [];
+    }
     return JSON.parse(raw);
   } catch (err) {
     console.error("Error reading questions:", err.message);
@@ -33,8 +36,19 @@ function readSessions() {
   try {
     ensureDataFiles();
     const raw = fs.readFileSync(SESSIONS_FILE, "utf8");
+    if (!raw || !raw.trim()) {
+      return [];
+    }
     return JSON.parse(raw);
   } catch (err) {
+    try {
+      const rawRetry = fs.readFileSync(SESSIONS_FILE, "utf8");
+      if (rawRetry && rawRetry.trim()) {
+        return JSON.parse(rawRetry);
+      }
+    } catch {
+      // ignore retry failure
+    }
     console.error("Error reading sessions:", err.message);
     return [];
   }
@@ -43,7 +57,9 @@ function readSessions() {
 function writeSessions(sessions) {
   try {
     ensureDataFiles();
-    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2), "utf8");
+    const tmpPath = `${SESSIONS_FILE}.${process.pid}.${Date.now()}.tmp`;
+    fs.writeFileSync(tmpPath, JSON.stringify(sessions, null, 2), "utf8");
+    fs.renameSync(tmpPath, SESSIONS_FILE);
     return true;
   } catch (err) {
     console.error("Error writing sessions:", err.message);
@@ -103,8 +119,23 @@ function parseJsonBody(req) {
   });
 }
 
-function createServer() {
+function createServer(options = {}) {
   ensureDataFiles();
+  const inMemory = Boolean(options.inMemory);
+  let localSessions = inMemory ? (options.initialSessions ? [...options.initialSessions] : []) : null;
+
+  function getSessions() {
+    if (inMemory) return localSessions;
+    return readSessions();
+  }
+
+  function saveSessions(sessions) {
+    if (inMemory) {
+      localSessions = sessions;
+      return true;
+    }
+    return writeSessions(sessions);
+  }
 
   return http.createServer(async (req, res) => {
     const parsedUrl = new URL(req.url, `http://${req.headers?.host || "localhost:3000"}`);
@@ -182,14 +213,14 @@ function createServer() {
           totalQuestions: questions.length,
         };
 
-        const sessions = readSessions();
+        const sessions = getSessions();
         const existingIdx = sessions.findIndex((s) => s.sessionId === sessionId);
         if (existingIdx >= 0) {
           sessions[existingIdx] = { ...sessions[existingIdx], ...sessionRecord };
         } else {
           sessions.push(sessionRecord);
         }
-        writeSessions(sessions);
+        saveSessions(sessions);
 
         return sendJson(res, 200, {
           success: true,
@@ -220,7 +251,7 @@ function createServer() {
           return sendError(res, 400, "Missing or invalid 'answers' payload. Expected an object.");
         }
 
-        const sessions = readSessions();
+        const sessions = getSessions();
         const existingSession = sessions.find((s) => s.sessionId === sessionId);
 
         // Guard against duplicate submission of an already completed session
@@ -295,7 +326,7 @@ function createServer() {
         } else {
           sessions.push(completedRecord);
         }
-        writeSessions(sessions);
+        saveSessions(sessions);
 
         return sendJson(res, 200, {
           success: true,
@@ -320,7 +351,7 @@ function createServer() {
         if (!reqSessionId) {
           return sendError(res, 400, "Missing sessionId in URL");
         }
-        const sessions = readSessions();
+        const sessions = getSessions();
         const found = sessions.find((s) => s.sessionId === reqSessionId);
         if (found) {
           return sendJson(res, 200, found);

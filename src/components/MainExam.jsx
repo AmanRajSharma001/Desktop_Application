@@ -51,7 +51,7 @@ function getInitialDraft() {
   return null;
 }
 
-function MainExam({ time, onEndTest, isBlocked = false, isTimeExpired = false }) {
+function MainExam({ time, onEndTest, onExamSubmitted, isBlocked = false, isTimeExpired = false }) {
   const initialDraft = useMemo(() => getInitialDraft(), []);
   const [questions, setQuestions] = useState(sampleQuestions);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -230,6 +230,7 @@ function MainExam({ time, onEndTest, isBlocked = false, isTimeExpired = false })
           setResultsData(data);
           setIsSubmitted(true);
           setShowConfirmModal(false);
+          onExamSubmitted?.();
           return;
         }
 
@@ -242,6 +243,7 @@ function MainExam({ time, onEndTest, isBlocked = false, isTimeExpired = false })
           });
           setIsSubmitted(true);
           setShowConfirmModal(false);
+          onExamSubmitted?.();
           return;
         }
 
@@ -249,55 +251,33 @@ function MainExam({ time, onEndTest, isBlocked = false, isTimeExpired = false })
         const errMsg = data?.error || `Server responded with HTTP ${response.status}`;
         throw new Error(errMsg);
       } catch (err) {
-        console.warn("Backend submission failed, initiating reliable fallback evaluation:", err.message);
+        console.warn("Backend submission failed:", err.message);
+        const failureMessage = `Failed to submit exam: ${err.message}. Your answers are safely preserved.`;
+        setSubmissionError(failureMessage);
 
-        // If backend is unreachable or offline, calculate transparent local evaluation
-        const evaluatedReview = questions.map((q) => {
-          const userAns = currentAnswers[q.id] !== undefined ? currentAnswers[q.id] : null;
-          const isAnswered = userAns !== null && userAns !== undefined;
-          const isCorrect = isAnswered && q.correctAnswer !== undefined && Number(userAns) === q.correctAnswer;
-          return {
-            questionId: q.id,
-            question: q.question,
-            options: q.options,
-            selectedOption: userAns !== null ? Number(userAns) : null,
-            correctOption: q.correctAnswer !== undefined ? q.correctAnswer : null,
-            isCorrect: Boolean(isCorrect),
-            explanation: q.explanation || "",
-          };
-        });
-
-        const correct = evaluatedReview.filter((r) => r.isCorrect).length;
-        const unanswered = evaluatedReview.filter((r) => r.selectedOption === null).length;
-        const incorrect = totalQuestions - correct - unanswered;
-        const pct = totalQuestions > 0 ? Math.round((correct / totalQuestions) * 100) : 0;
-
-        const fallbackResult = {
-          success: true,
-          isOffline: true,
-          sessionId,
-          submissionId: `sub_offline_${Date.now()}`,
-          score: correct,
-          totalQuestions,
-          correctCount: correct,
-          incorrectCount: incorrect,
-          unansweredCount: unanswered,
-          percentage: pct,
-          submittedAt: Date.now(),
-          status: "completed_offline",
-          review: evaluatedReview,
-          error: `Backend unreachable (${err.message}). Evaluated in offline mode.`,
-        };
-
-        setResultsData(fallbackResult);
-        setIsSubmitted(true);
-        setShowConfirmModal(false);
+        // If auto-expired, present the results screen in unsubmitted/failed state with retry option
+        if (isAutoExpiry) {
+          setResultsData({
+            success: false,
+            error: failureMessage,
+            sessionId,
+            totalQuestions,
+            submittedAt: Date.now(),
+            answers: currentAnswers,
+            status: "submission_failed",
+            score: null,
+            percentage: null,
+            review: [],
+          });
+          setIsSubmitted(true);
+          setShowConfirmModal(false);
+        }
       } finally {
         setIsSubmitting(false);
         isSubmittingRef.current = false;
       }
     },
-    [sessionId, isSubmitted, questions, totalQuestions]
+    [sessionId, isSubmitted, totalQuestions, onExamSubmitted]
   );
 
   // Timer expiration auto-submission trigger

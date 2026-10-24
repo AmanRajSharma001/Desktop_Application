@@ -44,39 +44,52 @@ function ExamResults({ result, onExitExam, onRetrySubmit, isRetrying = false }) 
         </div>
 
         {/* Score & Key Metrics Section */}
-        <div className="score-hero">
-          <div className="score-pill">
-            <span className="score-big">{score}</span>
-            <span className="score-total">/ {totalQuestions}</span>
-          </div>
-          <div className="score-percentage-label">
-            Score: <strong>{percentage}%</strong>
-          </div>
-        </div>
+        {success && score !== null ? (
+          <>
+            <div className="score-hero">
+              <div className="score-pill">
+                <span className="score-big">{score}</span>
+                <span className="score-total">/ {totalQuestions}</span>
+              </div>
+              <div className="score-percentage-label">
+                Score: <strong>{percentage}%</strong>
+              </div>
+            </div>
 
-        {/* Detailed Stats Grid */}
-        <div className="results-metrics-grid">
-          <div className="metric-box">
-            <span className="metric-label">Total Questions</span>
-            <span className="metric-value">{totalQuestions}</span>
+            {/* Detailed Stats Grid */}
+            <div className="results-metrics-grid">
+              <div className="metric-box">
+                <span className="metric-label">Total Questions</span>
+                <span className="metric-value">{totalQuestions}</span>
+              </div>
+              <div className="metric-box metric-answered">
+                <span className="metric-label">Answered</span>
+                <span className="metric-value">{totalQuestions - unansweredCount}</span>
+              </div>
+              <div className="metric-box metric-unanswered">
+                <span className="metric-label">Unanswered</span>
+                <span className="metric-value">{unansweredCount}</span>
+              </div>
+              <div className="metric-box metric-correct">
+                <span className="metric-label">Correct</span>
+                <span className="metric-value">{correctCount}</span>
+              </div>
+              <div className="metric-box metric-incorrect">
+                <span className="metric-label">Incorrect</span>
+                <span className="metric-value">{incorrectCount}</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="score-hero" style={{ background: "#fffbeb", borderColor: "#fde68a" }}>
+            <div className="score-pill" style={{ color: "#d97706" }}>
+              <span className="score-big" style={{ fontSize: "28px" }}>Evaluation Pending</span>
+            </div>
+            <div className="score-percentage-label" style={{ color: "#92400e" }}>
+              Your answers have been preserved. Please retry submission to connect to the evaluation server.
+            </div>
           </div>
-          <div className="metric-box metric-answered">
-            <span className="metric-label">Answered</span>
-            <span className="metric-value">{totalQuestions - unansweredCount}</span>
-          </div>
-          <div className="metric-box metric-unanswered">
-            <span className="metric-label">Unanswered</span>
-            <span className="metric-value">{unansweredCount}</span>
-          </div>
-          <div className="metric-box metric-correct">
-            <span className="metric-label">Correct</span>
-            <span className="metric-value">{correctCount}</span>
-          </div>
-          <div className="metric-box metric-incorrect">
-            <span className="metric-label">Incorrect</span>
-            <span className="metric-value">{incorrectCount}</span>
-          </div>
-        </div>
+        )}
 
         {/* Metadata info */}
         <div className="results-meta-row">

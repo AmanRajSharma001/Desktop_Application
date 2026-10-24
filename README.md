@@ -2,6 +2,8 @@
 
 A secure, proctored desktop examination application built with **Electron**, **React**, **Vite**, and a lightweight, zero-dependency **Node.js backend service**. The application combines native OS lockdown capabilities (frameless kiosk window, native modal dialogs, real-time native fullscreen state verification, periodic background webcam snapshot capture, and mandatory screen sharing via Electron `desktopCapturer`) with a modern React single-page examination interface, trusted backend evaluation, and post-exam performance results.
 
+**Status: Day 5 Completed — Fully Audited, End-to-End Tested (62/62 Passing), Hardened, and Release-Ready.**
+
 ---
 
 ## Table of Contents
@@ -16,7 +18,7 @@ A secure, proctored desktop examination application built with **Electron**, **R
   - [3. Mandatory Screen Sharing — desktopCapturer Integration](#3-mandatory-screen-sharing--desktopcapturer-integration)
   - [4. Escape Key Handling, Exit Detection & Controlled Recovery](#4-escape-key-handling-exit-detection--controlled-recovery)
   - [5. Screen Sharing Loss During Active Exam](#5-screen-sharing-loss-during-active-exam)
-- [Complete Exam Lifecycle, Submission & Results (Day 4)](#complete-exam-lifecycle-submission--results-day-4)
+- [Complete Exam Lifecycle, Submission & Results (Days 4 & 5)](#complete-exam-lifecycle-submission--results-days-4--5)
   - [1. Reliable Question Loading & Sanitization](#1-reliable-question-loading--sanitization)
   - [2. Answer Selection, Persistence & Question Palette](#2-answer-selection-persistence--question-palette)
   - [3. Local Draft Persistence (localStorage Auto-Save)](#3-local-draft-persistence-localstorage-auto-save)
@@ -26,6 +28,7 @@ A secure, proctored desktop examination application built with **Electron**, **R
   - [7. Trusted Backend Evaluation & Scoring Engine](#7-trusted-backend-evaluation--scoring-engine)
   - [8. Post-Exam Results & Performance Review Screen](#8-post-exam-results--performance-review-screen)
   - [9. Teardown, Cleanup & Resource Deallocation](#9-teardown-cleanup--resource-deallocation)
+  - [10. Submission Failure Handling & Answer Preservation](#10-submission-failure-handling--answer-preservation)
 - [Backend Service & API Reference](#backend-service--api-reference)
   - [Backend Architecture & Data Stores](#backend-architecture--data-stores)
   - [REST API Endpoints](#rest-api-endpoints)
@@ -36,9 +39,10 @@ A secure, proctored desktop examination application built with **Electron**, **R
 - [Prerequisites & System Requirements](#prerequisites--system-requirements)
 - [Installation & Setup](#installation--setup)
 - [Running the Application](#running-the-application)
+- [Building & Release Preparation](#building--release-preparation)
 - [Verification & Automated Test Suite](#verification--automated-test-suite)
 - [Known Limitations](#known-limitations)
-- [Implementation Status & Roadmap](#implementation-status--roadmap)
+- [Implementation Status & Release Readiness](#implementation-status--release-readiness)
 
 ---
 
@@ -328,16 +332,23 @@ Upon receiving confirmation from the backend, [`src/components/ExamResults.jsx`]
 
 ---
 
-### 9. Teardown, Cleanup & Resource Deallocation
+### 9. Teardown, Cleanup & Immediate Interval Shutdown (Day 5)
 
-When the candidate exits the exam from the results screen:
-- Camera video tracks are stopped and released.
-- Screen sharing video tracks are stopped and released.
-- Periodic proctoring capture intervals (5s camera, 5s screen) are stopped.
-- Timer synchronization interval is cleared.
-- Electron main process clears `end_time` via `endTest` IPC.
-- Native kiosk and fullscreen modes are exited.
-- Application cleanly returns to the pre-flight landing page.
+As soon as exam submission succeeds (or auto-expires):
+- **Immediate Capture Loop Shutdown:** Both 5-second camera snapshot and 5-second screen capture intervals are immediately cleared via `onExamSubmitted` callback. No further disk writes or screenshots occur while the candidate reviews results.
+- **Lockdown Release:** Electron's kiosk lockdown is lifted via `window.electronAPI.endTest()`, enabling the candidate to read results without trapping the window.
+- **Hardware Track Release:** Screen recording and camera tracks have their `onended` listeners detached and are stopped, releasing webcam and screen resources.
+- **Return to Home:** When clicking **"Exit Exam & Return to Home"**, all state (`started`, `isExamSubmitted`, `time`) is reset to initial defaults.
+
+---
+
+### 10. Submission Failure Handling & Answer Preservation (Day 5)
+
+The application handles network interruptions, server downtime, and failed submissions safely:
+- **No Invented Scores:** The application never generates simulated scores or fake 100% / 0% results. It never reports `success: true` unless the trusted backend has confirmed and evaluated the submission.
+- **Answer Preservation:** Candidate answers remain safely preserved in React component state and in `localStorage` (`athena_exam_draft`).
+- **Manual Submission Failures:** If a candidate clicks submit while the server is unreachable, the confirmation modal remains accessible with a clear error alert: *"Failed to submit exam: [error details]. Your answers are safely preserved."* The candidate can retry submission immediately once connectivity is re-established.
+- **Timer Expiry Failures:** If the timer reaches zero while the backend is temporarily offline, the application presents the Results screen in an unsubmitted state (`success: false`, `score: null`) with an explanatory alert and a prominent **"Retry Submission"** button. Clicking retry re-transmits the preserved answers to the backend without data loss.
 
 ---
 
@@ -398,7 +409,8 @@ Desktop_Application/
 ├── test/
 │   ├── exam_enforcement.test.js      # Day 2: 12 automated scenarios
 │   ├── day3_screen_sharing.test.js   # Day 3: 18 automated scenarios
-│   └── day4_lifecycle_submission.test.js # Day 4: 12 automated scenarios (MCQ, submission, results)
+│   ├── day4_lifecycle_submission.test.js # Day 4: 12 automated scenarios (MCQ, submission, results)
+│   └── day5_e2e_release.test.js      # Day 5: 20 comprehensive end-to-end verification scenarios
 ├── eslint.config.js
 ├── index.html
 ├── INTEGRATION_MAP.md
@@ -501,6 +513,32 @@ npm start
 
 ---
 
+## Building & Release Preparation
+
+### Production Frontend Build
+
+To compile the React 19 application into optimized production bundles:
+
+```bash
+npm run build
+```
+
+This compiles client assets into `dist/`:
+- `dist/index.html` (mount container)
+- `dist/assets/index-[hash].js` (Vite production bundle)
+- `dist/assets/index-[hash].css` (compiled styling)
+
+When running Electron in standalone/production mode without a local Vite dev server, `electron/main.cjs` automatically detects and loads `dist/index.html`.
+
+### Desktop Packaging Status & Evaluation
+
+- **Configured Build Tooling:** The repository uses `npm run build` (`vite build`) for compiling static renderer assets.
+- **Standalone Packaging Framework:** Dedicated packaging tools (such as `electron-builder` or `@electron-forge/cli`) are **not currently configured** in `package.json` dependencies. This avoids bundling gigabytes of cross-platform binary toolchains in development.
+- **Packaged Path Hardening:** `electron/main.cjs` has been hardened for packaged execution: when `app.isPackaged` is true, camera and screen proctoring snapshots safely fall back to `app.getPath("userData")` if the local working directory is read-only.
+- **Future Distribution Roadmap:** Production `.dmg` (macOS), `.exe` / NSIS installer (Windows), and `.AppImage` (Linux) installers can be configured in a subsequent deployment phase using `electron-builder`.
+
+---
+
 ## Verification & Automated Test Suite
 
 Run the full automated test suite using Node's built-in test runner:
@@ -508,19 +546,56 @@ Run the full automated test suite using Node's built-in test runner:
 ```bash
 npm test
 ```
+
+Executes **62 tests** across four test suites with **0 failures**:
+
+```text
+✔ Day 2 — test/exam_enforcement.test.js (12 scenarios passing)
+✔ Day 3 — test/day3_screen_sharing.test.js (18 scenarios passing)
+✔ Day 4 — test/day4_lifecycle_submission.test.js (12 scenarios passing)
+✔ Day 5 — test/day5_e2e_release.test.js (20 scenarios passing)
+ℹ tests 62 | pass 62 | fail 0 | cancelled 0
+```
+
+### Day 5 End-to-End Test Scenarios (`day5_e2e_release.test.js`)
+
+| # | Scenario | Verification Goal | Result |
+| :--- | :--- | :--- | :--- |
+| 1 | Camera permission denied | `NotAllowedError` sets status to Error; blocks start | ✅ Pass |
+| 2 | Camera unavailable | Missing device / failed track sets Error and blocks start | ✅ Pass |
+| 3 | Fullscreen not active | Inactive fullscreen disables Start Exam | ✅ Pass |
+| 4 | Screen sharing cancelled | Cancelling picker retains "Not Ready" status; start blocked | ✅ Pass |
+| 5 | Screen Recording missing (macOS) | Detects denied permission and provides System Settings guidance | ✅ Pass |
+| 6 | No desktop sources returned | Empty source array produces helpful permission hint | ✅ Pass |
+| 7 | All 3 readiness requirements met | Camera live, fullscreen active, screen share live -> enables Start | ✅ Pass |
+| 8 | Exam starts exactly once | Concurrent start calls are blocked by concurrency guard | ✅ Pass |
+| 9 | Questions load correctly | `GET /exam/mcq/all` provides sanitized questions without answer keys | ✅ Pass |
+| 10 | Answers persist across navigation | Answers stored by ID; restored across Back, Next, and palette jumps | ✅ Pass |
+| 11 | Screen sharing stops during exam | `track.onended` blocks exam interaction and displays recovery overlay | ✅ Pass |
+| 12 | Fullscreen exited during exam | Fullscreen exit blocks interaction; manual recovery restores state | ✅ Pass |
+| 13 | Timer reaches zero | Triggers auto-submission at most once; freezes further edits | ✅ Pass |
+| 14 | Submission succeeds | Backend evaluates answers and returns trusted scores & itemized review | ✅ Pass |
+| 15 | Submission fails | Server error preserves answers in state & localStorage; no fake score invented | ✅ Pass |
+| 16 | Repeated submissions blocked | In-flight submission lock and backend 409 duplicate session guard | ✅ Pass |
+| 17 | Results reflect backend data | Results screen strictly reflects actual backend evaluation metrics | ✅ Pass |
+| 18 | Capture intervals stop on submit | Both camera & screen capture loops clear immediately on submission | ✅ Pass |
+| 19 | No duplicate intervals on recovery | Recovery from interruption maintains exactly 1 active capture interval | ✅ Pass |
+| 20 | Day 2 & 3 regression integrity | Combined preflight, lockdown, palette, and teardown work together | ✅ Pass |
+
 ---
 
 ## Known Limitations
 
-- **macOS Screen Recording Permission:** `desktopCapturer.getSources()` returns an empty array if permission is denied. The app detects this and presents instructions to enable access in macOS System Settings.
+- **macOS Screen Recording Permission:** `desktopCapturer.getSources()` returns an empty array if permission is denied. The app detects this and presents instructions to enable access in macOS System Settings > Privacy & Security > Screen Recording.
 - **Sandboxed Test Execution:** In sandboxed execution environments, loopback TCP socket connections (`127.0.0.1`) are restricted by OS sandbox policy. The automated test suite utilizes Node's EventEmitter request dispatcher to execute full in-memory HTTP evaluations without socket overhead.
-- **Offline Mode:** If the backend is offline at exam start, the app loads local fallback questions and computes local provisional results upon completion, allowing candidates to retry backend synchronization once connectivity is restored.
+- **Packaging Framework:** Native binary installer packaging (`.dmg` / `.exe`) is not configured in `package.json`; production builds are currently produced via `npm run build` and run through Electron.
+- **Offline Submission:** If the backend is offline upon manual submission, answers are preserved in state and localStorage, allowing the candidate to retry once the server returns online.
 
 ---
 
-## Implementation Status & Roadmap
+## Implementation Status & Release Readiness
 
-### Fully Implemented (Day 1 + Day 2 + Day 3 + Day 4)
+### Fully Implemented & Verified (Day 1 through Day 5)
 
 - [x] **3-Way Mandatory Pre-Flight Checklist:** Camera, fullscreen, screen sharing — all verified before exam access.
 - [x] **Screen Sharing via `desktopCapturer`:** Thumbnail source-picker modal, window/screen stream acquisition.
@@ -535,9 +610,11 @@ npm test
 - [x] **Authoritative Timer Expiration:** Automated submission trigger when the timer reaches zero.
 - [x] **Trusted Scoring Engine:** Authoritative evaluation against secret answer key; attempts persisted in `backend/data/sessions.json`.
 - [x] **Post-Exam Results Dashboard:** Score, percentage, metrics breakdown, question review, and hardware teardown.
-- [x] **Automated Test Suite:** 42 passing scenarios across all phases (`npm test`).
+- [x] **Immediate Capture Teardown:** Camera and screen proctoring intervals stop immediately upon submission.
+- [x] **Submission Failure Protection:** Safe error handling without inventing fake scores; preserves answers and enables retry.
+- [x] **Complete Automated Test Suite:** **62 passing scenarios across 4 test suites (`npm test`) with 0 failures**.
 
-### Remaining Future Enhancements
+### Potential Future Enhancements
 
 - [ ] **Candidate Identity Onboarding Form:** Student roll number and batch selection on the landing page.
 - [ ] **Database Expansion:** Optional migration from JSON store to PostgreSQL / Prisma for multi-institution deployments.

@@ -36,6 +36,7 @@ This document defines the comprehensive file-by-file integration mapping from bo
 | `athena-exam/athena-backend/data/questions.json` | MCQ question bank with answer keys | Adapt | `backend/data/questions.json` | Trusted question bank storing question prompts, option lists, `correctAnswer` indices, and explanations. Sanitized before delivery to frontend. |
 | `athena-exam/athena-backend/data/sessions.json` | Persistent exam attempt session storage | Adapt | `backend/data/sessions.json` | Persistent JSON store recording candidate session IDs, timestamps, answers, evaluated scores, and attempt status. |
 | `test/day4_lifecycle_submission.test.js` | Day 4 lifecycle & integration test suite | Create | `test/day4_lifecycle_submission.test.js` | 12 automated scenarios verifying question loading, answer persistence, submission validation, duplicate locks, trusted scoring, timer auto-submit, and results generation. |
+| `test/day5_e2e_release.test.js` | Day 5 final audit, E2E & release readiness test suite | Create | `test/day5_e2e_release.test.js` | 20 comprehensive end-to-end scenarios covering permissions, lockdown, desktopCapturer, question persistence, trusted scoring, submission error handling, immediate interval cleanup, and regressions. |
 
 ---
 

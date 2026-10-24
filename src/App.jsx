@@ -18,6 +18,7 @@ function App() {
   const [examEnded, setExamEnded] = useState(false);
   const [examEndMessage, setExamEndMessage] = useState("");
   const [isTimeExpired, setIsTimeExpired] = useState(false);
+  const [isExamSubmitted, setIsExamSubmitted] = useState(false);
 
   // Prerequisites status
   const [cameraStatus, setCameraStatus] = useState("Not Ready"); // "Not Ready" | "Ready" | "Error"
@@ -40,6 +41,7 @@ function App() {
     if (videoStreamRef.current) {
       videoStreamRef.current.getTracks().forEach((track) => {
         try {
+          track.onended = null;
           track.stop();
         } catch (e) {
           console.warn("Error stopping camera track:", e);
@@ -58,6 +60,7 @@ function App() {
     if (screenStreamRef.current) {
       screenStreamRef.current.getTracks().forEach((track) => {
         try {
+          track.onended = null;
           track.stop();
         } catch (e) {
           console.warn("Error stopping screen track:", e);
@@ -91,6 +94,17 @@ function App() {
     setScreenShareError("Screen sharing has stopped. Please share your screen again.");
   }, []);
 
+  // Callback when exam answers are successfully submitted
+  const handleExamSubmitted = useCallback(() => {
+    setIsExamSubmitted(true);
+    if (window.electronAPI && window.electronAPI.endTest) {
+      window.electronAPI.endTest().catch((err) => {
+        console.warn("Error calling endTest IPC on submission:", err);
+      });
+    }
+    cleanupScreenShare();
+  }, [cleanupScreenShare]);
+
   // End exam and teardown all hardware/timers
   const handleEndExam = useCallback(
     async (message = "Exam ended.") => {
@@ -106,6 +120,7 @@ function App() {
       }
 
       setStarted(false);
+      setIsExamSubmitted(false);
       setExamEnded(true);
       setExamEndMessage(message);
       setIsTimeExpired(false);
@@ -211,6 +226,11 @@ function App() {
       if (track.readyState !== "live") {
         throw new Error(`Video track is not live (${track.readyState}).`);
       }
+
+      track.onended = () => {
+        setCameraStatus("Error");
+        setCameraError("Camera stream has stopped or was disconnected.");
+      };
 
       videoStreamRef.current = stream;
 
@@ -503,7 +523,7 @@ function App() {
 
   // Camera proctoring capture interval
   useEffect(() => {
-    if (!started || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
+    if (!started || isExamSubmitted || cameraStatus !== "Ready" || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
 
     const id = setInterval(() => {
       clickPhoto();
@@ -512,11 +532,11 @@ function App() {
     return () => {
       clearInterval(id);
     };
-  }, [started, fullscreenStatus, screenShareStatus]);
+  }, [started, isExamSubmitted, cameraStatus, fullscreenStatus, screenShareStatus]);
 
   // Screen sharing proctoring capture interval
   useEffect(() => {
-    if (!started || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
+    if (!started || isExamSubmitted || fullscreenStatus !== "Active" || screenShareStatus !== "Ready") return;
 
     const id = setInterval(() => {
       captureScreenFrame();
@@ -525,7 +545,7 @@ function App() {
     return () => {
       clearInterval(id);
     };
-  }, [started, fullscreenStatus, screenShareStatus]);
+  }, [started, isExamSubmitted, fullscreenStatus, screenShareStatus]);
 
   // Start exam with strict revalidation of all three prerequisites
   async function startTest() {
@@ -659,8 +679,8 @@ function App() {
     return `${hours}:${minutes}:${seconds}`;
   }
 
-  const isFullscreenBlocked = started && fullscreenStatus !== "Active";
-  const isScreenShareBlocked = started && screenShareStatus !== "Ready";
+  const isFullscreenBlocked = started && !isExamSubmitted && fullscreenStatus !== "Active";
+  const isScreenShareBlocked = started && !isExamSubmitted && screenShareStatus !== "Ready";
   const isExamBlocked = isFullscreenBlocked || isScreenShareBlocked;
   const canStartExam =
     cameraStatus === "Ready" &&
@@ -742,7 +762,7 @@ function App() {
               </div>
             ) : availableSources.length === 0 ? (
               <div className="source-empty-state">
-                <p>No screens or windows found to share.</p>
+                <p>No screens or windows found to share. On macOS, please ensure Screen Recording permission is enabled in System Settings &gt; Privacy &amp; Security &gt; Screen Recording.</p>
               </div>
             ) : (
               <div className="source-grid">
@@ -794,6 +814,7 @@ function App() {
         <MainExam
           time={formatTimeLeft(time)}
           onEndTest={() => handleEndExam("You have submitted and concluded the exam.")}
+          onExamSubmitted={handleExamSubmitted}
           isBlocked={isExamBlocked}
           isTimeExpired={isTimeExpired}
         />

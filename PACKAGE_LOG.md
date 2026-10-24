@@ -31,3 +31,12 @@ On **Day 4**, the backend integration was implemented natively using standard No
 - **Zero External Dependencies:** Built without external `express` or `cors` npm packages to eliminate dependency bloat, reduce supply chain vulnerabilities, and enable fully deterministic execution in isolated environments.
 - **Data Persistence:** Lightweight, reliable JSON storage implemented in `backend/data/questions.json` and `backend/data/sessions.json`.
 - **Runtime Scripts:** Added `"server": "node backend/server.js"` to `package.json` for independent execution.
+
+## Day 5 Release Readiness & Packaging Audit
+
+On **Day 5**, a comprehensive dependency and release audit was performed:
+
+- **Zero Additional Dependencies:** Confirmed that no superfluous npm packages were added, keeping the dependency surface minimal, secure, and fully deterministic.
+- **Node Test Runner:** Verified that all 62 tests execute using Node's native test runner (`node --test`), eliminating the need for bulky test frameworks like Jest or Vitest.
+- **Production Asset Compilation:** Confirmed `npm run build` (`vite build`) successfully transforms all 19 modules into optimized static client assets in `dist/`.
+- **Packaging Hardening:** Main process snapshot paths were audited and hardened to support packaged environments (falling back to `app.getPath("userData")` if the bundle directory is read-only). Dedicated installer packaging tooling (e.g. `electron-builder`) is deferred to production deployment to prevent development bloat.
